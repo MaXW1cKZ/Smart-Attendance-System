@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # Database Service (PostgreSQL + pgvector)
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: smart_attendance_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=smart_attendance
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  # Backend Service (FastAPI) - เราจะ uncomment เมื่อเขียน Dockerfile เสร็จ
+  # backend:
+  #   build: ./backend
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     - db
+  #   env_file:
+  #     - ./backend/.env
+
+volumes:
+  postgres_data:
