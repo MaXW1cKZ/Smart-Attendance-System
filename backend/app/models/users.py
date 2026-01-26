@@ -7,15 +7,16 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    
+    # แก้ตรงนี้: nullable=True (เพราะ Google login ไม่มี password)
+    hashed_password = Column(String, nullable=True) 
+    
     full_name = Column(String, nullable=True)
-
-    # Role : 'student', 'teacher', 'admin'
-    role = Column(String, nullable=False, default='student')
-
-    #เช็คว่าลงทะเบียนใบหน้าหรือยัง
-    has_face_registered = Column(Boolean, default=False)
-
+    role = Column(String, default="student")
+    
+    # เพิ่มบรรทัดนี้: เก็บ Google ID กันคนชื่อซ้ำ หรือเอาไว้เช็ค
+    google_id = Column(String, unique=True, nullable=True)
+    
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
