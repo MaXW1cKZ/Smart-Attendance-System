@@ -1,30 +1,77 @@
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
-import jwt
+# backend/app/core/security.py
 import os
+from datetime import datetime, timedelta
+from typing import Optional
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from dotenv import load_dotenv
 
+from app.core.database import get_db
+from app.models.users import User  # Import Model DB
+
+# ✅ 1. โหลดค่าจาก .env
 load_dotenv()
 
-# Config จาก .env
-SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey123") # ควรตรงกับ .env
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey123")  # ถ้าหาไม่เจอจะใช้ค่า Default
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
+# ตั้งค่า Password Hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# ฟังก์ชันเช็ค Password ว่าตรงกับ Hash ใน DB ไหม
+# ตั้งค่าตัวดึง Token จาก Header (Bearer Token)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+# --- ฟังก์ชันพื้นฐาน ---
 def verify_password(plain_password, hashed_password):
+    if not hashed_password:
+        return False
     return pwd_context.verify(plain_password, hashed_password)
 
-# ฟังก์ชันแปลง Password เป็น Hash (ใช้แทนตัวเดิมใน user.py)
+
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-# ฟังก์ชันสร้าง Token (JWT)
-def create_access_token(data: dict):
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+
+# --- ✅ ฟังก์ชันพระเอก (ที่ Error ถามหา) ---
+async def get_current_user(
+    token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
+):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        # 1. แกะ Token ดู Email
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    # 2. ค้นหา User ใน Database
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalars().first()
+
+    if user is None:
+        raise credentials_exception
+
+    return user

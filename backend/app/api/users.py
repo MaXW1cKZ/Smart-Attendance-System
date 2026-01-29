@@ -5,11 +5,14 @@ from app.core.security import get_password_hash
 
 from app.core.database import get_db
 from app.models.users import User
-from app.schemas import UserCreate, UserResponse
+from app.schemas.users import UserCreate, UserResponse
 
 router = APIRouter()
 
-@router.post("/users/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/users/", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
     # ตรวจสอบว่าอีเมลนี้มีอยู่แล้วหรือไม่
     result = await db.execute(select(User).where(User.email == user.email))
@@ -25,9 +28,9 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
         email=user.email,
         full_name=user.full_name,
         role=user.role,
-        hashed_password=hashed_password
+        hashed_password=hashed_password,
     )
-    #บันทึกลง Database
+    # บันทึกลง Database
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
