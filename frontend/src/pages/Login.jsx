@@ -1,170 +1,188 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FiEye, FiEyeOff } from 'react-icons/fi';
-import axios from 'axios';
-import { GoogleLogin } from '@react-oauth/google'; // Import Google Component
-
-// Import Assets
-import illustration from '../assets/login-bg.png';
-// import kmitlLogo from '../assets/kmitl-logo.png'; // (ถ้าจะเอาปุ่ม KMITL ออก ก็คอมเมนต์บรรทัดนี้ได้ครับ)
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { GoogleLogin } from "@react-oauth/google";
+import axios from "axios";
 
 const Login = () => {
   const navigate = useNavigate();
-  const [showPassword, setShowPassword] = useState(false);
-  
-  const [formData, setFormData] = useState({
-    username: '', 
-    password: ''
-  });
-  const [error, setError] = useState('');
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  // State สำหรับ Login แบบปกติ
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  // ⭐ ตรวจสอบว่า Login อยู่แล้วหรือไม่
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      // ถ้า Login แล้ว -> ไปหน้า Dashboard เลย
+      navigate("/dashboard");
+    }
+  }, [navigate]);
+
+  // --- ฟังก์ชันส่วนกลาง: จัดการหลัง Login สำเร็จ (ใช้ร่วมกันทั้ง 2 แบบ) ---
+  const handleLoginSuccessData = (data) => {
+    const { access_token, token_type, role, user_name, user_id } = data;
+
+    // 1. เก็บข้อมูลลง LocalStorage
+    localStorage.setItem("token", access_token);
+    localStorage.setItem("role", role || "student");
+    localStorage.setItem("user_name", user_name || "User");
+    localStorage.setItem("user_id", user_id || "");
+
+    // 2. แยกเส้นทางตาม Role 🚦
+    if (role === "admin") {
+      navigate("/dashboard");
+    } else if (role === "teacher") {
+      navigate("/teacher/dashboard");
+    } else {
+      // Student (Default)
+      navigate("/student/dashboard");
+    }
   };
 
-  // --- 1. ฟังก์ชัน Login ปกติ ---
-  const handleLogin = async (e) => {
-    e.preventDefault(); 
-    setError('');
-
+  // --- 1️⃣ Logic: Standard Login ---
+  const handleStandardLogin = async (e) => {
+    e.preventDefault();
+    setError("");
     try {
-      const params = new URLSearchParams();
-      params.append('username', formData.username);
-      params.append('password', formData.password);
+      // ส่งข้อมูลแบบ Form Data (ตามมาตรฐาน OAuth2)
+      const formData = new FormData();
+      formData.append("username", email);
+      formData.append("password", password);
 
-      const response = await axios.post('http://127.0.0.1:8000/token', params);
-
-      const token = response.data.access_token;
-      localStorage.setItem('token', token);
-      
-      alert("Login สำเร็จ! ได้ Token แล้ว");
-      console.log("Token:", token);
-      
-      navigate('/dashboard'); 
-
+      const res = await axios.post("http://localhost:8000/token", formData);
+      handleLoginSuccessData(res.data);
     } catch (err) {
       console.error(err);
-      setError('Login ไม่ผ่าน! อีเมลหรือรหัสผ่านผิดครับ');
+      setError("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
     }
   };
 
-  // --- 2. ฟังก์ชัน Google Login (ย้ายออกมาให้อยู่ข้างนอก handleLogin) ---
+  // --- 2️⃣ Logic: Google Login ---
   const handleGoogleSuccess = async (credentialResponse) => {
+    setError("");
     try {
-        console.log("Google Token:", credentialResponse.credential);
-
-        // ส่ง Token ไปให้ Backend ตรวจสอบ
-        const res = await axios.post('http://127.0.0.1:8000/google-login', {
-            token: credentialResponse.credential
-        });
-
-        const { access_token } = res.data;
-
-        localStorage.setItem('token', access_token);
-        alert("Login ด้วย Google สำเร็จ!");
-
-        navigate('/dashboard');
-
+      const res = await axios.post("http://localhost:8000/google-login", {
+        token: credentialResponse.credential,
+      });
+      handleLoginSuccessData(res.data);
     } catch (err) {
-        console.error("Google Login Error:", err);
-        alert("เกิดข้อผิดพลาดในการเชื่อมต่อกับ Server");
+      console.error("Google Login Failed:", err);
+      setError("เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
     }
   };
 
+  // --- UI ---
   return (
-    <div className="flex h-screen w-full bg-white font-sans">
-      {/* --- Left Side --- */}
-      <div className="hidden md:flex w-1/2 flex-col justify-center items-center p-10 relative">
-        <div className="w-full max-w-lg">
-            <h1 className="text-4xl font-bold text-black mb-2">Welcome to</h1>
-            <h1 className="text-4xl font-bold text-black mb-8">Smart Attendance</h1>
-            <div className="border-4 border-blue-400 rounded-lg p-2 overflow-hidden">
-                <img src={illustration} alt="Login Illustration" className="w-full h-auto object-cover"/>
-            </div>
-        </div>
+    <div className="flex h-screen w-full bg-white font-sans overflow-hidden">
+      {/* Left Side - Image */}
+      <div className="hidden lg:flex w-1/2 bg-blue-50 items-center justify-center relative overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 w-[800px] h-[800px] bg-blue-200/50 rounded-full blur-3xl mix-blend-multiply animate-blob"></div>
+        <div className="absolute top-1/3 right-1/4 w-[600px] h-[600px] bg-purple-200/50 rounded-full blur-3xl mix-blend-multiply animate-blob animation-delay-2000"></div>
+        <img
+          src="https://img.freepik.com/free-vector/biometric-security-abstract-concept-illustration_335657-3882.jpg?t=st=1735715581~exp=1735719181~hmac=4d335078b64432b874d6428970f451404022585657477751211987835218830c&w=1380"
+          alt="Face Recognition"
+          className="relative z-10 w-4/5 h-auto object-contain drop-shadow-2xl hover:scale-105 transition-transform duration-500"
+        />
       </div>
 
-      {/* --- Right Side --- */}
-      <div className="w-full md:w-1/2 flex justify-center items-center bg-white p-8">
-        <div className="w-full max-w-md">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-2xl font-bold text-black">Sign in</h2>
-            <div className="text-sm text-gray-500 cursor-pointer">English ▼</div>
+      {/* Right Side - Login Form */}
+      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center px-8 md:px-16 relative z-20 bg-white/80 backdrop-blur-md">
+        <div className="w-full max-w-md space-y-8">
+          {/* Header */}
+          <div className="text-center">
+            <h1 className="text-4xl font-extrabold text-blue-900 tracking-tight mb-2">
+              Smart{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
+                Attendance
+              </span>
+            </h1>
+            <p className="text-gray-500 text-lg">
+              Welcome back! Please login to continue.
+            </p>
           </div>
 
-          {error && <div className="mb-4 text-red-500 text-sm text-center">{error}</div>}
-
-          <form onSubmit={handleLogin}>
-            <div className="mb-4">
-              <input
-                name="username"
-                value={formData.username}
-                onChange={handleChange}
-                type="text"
-                placeholder="Enter Email"
-                className="w-full bg-gray-50 border border-gray-200 text-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition"
-                required
-              />
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 text-red-500 p-3 rounded-lg text-sm text-center">
+              {error}
             </div>
+          )}
 
-            <div className="mb-2 relative">
-              <input
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                type={showPassword ? "text" : "password"}
-                placeholder="Password"
-                className="w-full bg-gray-50 border border-gray-200 text-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600"
+          {/* 1️⃣ Standard Login Form */}
+          <form onSubmit={handleStandardLogin} className="space-y-6 mt-8">
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 ml-1 mb-2"
               >
-                {showPassword ? <FiEyeOff size={20} /> : <FiEye size={20} />}
-              </button>
+                Email Address
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-5 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 outline-none"
+                placeholder="kmitl_id@kmitl.ac.th"
+              />
             </div>
-
-            <div className="flex justify-end mb-6">
-              <a href="#" className="text-sm text-gray-500 hover:text-blue-600">Recover Password ?</a>
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 ml-1 mb-2"
+              >
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-5 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 outline-none"
+                placeholder="••••••••"
+              />
             </div>
-
-            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg shadow-md transition duration-200 mb-4">
-              Sign in
-            </button>
-            
-            <button type="button" className="w-full bg-sky-400 hover:bg-sky-500 text-white font-semibold py-3 rounded-lg shadow-md transition duration-200 mb-6">
-              Register
+            <button
+              type="submit"
+              className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform hover:-translate-y-0.5 transition-all duration-200"
+            >
+              Sign In
             </button>
           </form>
 
-          {/* --- ส่วนปุ่ม Social Login --- */}
-          <div className="relative flex py-2 items-center mb-6">
-            <div className="flex-grow border-t border-gray-200"></div>
-            <span className="flex-shrink-0 mx-4 text-gray-400 text-sm">Or continue with</span>
-            <div className="flex-grow border-t border-gray-200"></div>
-          </div>
-          
-          {/* ✅ ใส่ปุ่ม Google Login ตรงนี้ครับ */}
-          <div className="flex justify-center gap-4">
-            <GoogleLogin 
-                onSuccess={handleGoogleSuccess} 
-                onError={() => { 
-                    console.log('Login Failed'); 
-                    alert("Login ล้มเหลว"); 
-                }} 
-                useOneTap 
-                shape="circle" // ปรับทรงปุ่ม (optional)
-            />
-            
-            {/* ถ้าอยากเก็บปุ่ม KMITL ไว้ด้วย ให้เปิดคอมเมนต์บรรทัดล่างนี้ครับ */}
-            {/* <button className="p-2 rounded-xl hover:bg-gray-50 border border-gray-100 shadow-sm transition">
-               <img src={kmitlLogo} alt="Logo" className="w-10 h-10" />
-            </button> 
-            */}
+          {/* Divider */}
+          <div className="relative flex items-center justify-center my-6">
+            <div className="border-t border-gray-200 w-full"></div>
+            <span className="bg-white px-4 text-sm text-gray-500 absolute z-10">
+              OR
+            </span>
           </div>
 
+          {/* 2️⃣ Google Login Button */}
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => {
+                console.log("Google Login Failed");
+                setError("Google Login Failed");
+              }}
+              shape="circle"
+              width="200"
+              theme="filled_blue"
+            />
+          </div>
+
+          {/* Footer */}
+          <p className="text-center text-sm text-gray-500 mt-8">
+            Don't have an account?{" "}
+            <span className="font-semibold text-blue-600 hover:text-blue-500 cursor-pointer">
+              Currently, please use Google Login.
+            </span>
+          </p>
         </div>
       </div>
     </div>

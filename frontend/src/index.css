@@ -1,3 +1,12 @@
+/* ✅ 1. เอา @import ไว้บนสุด */
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap");
+
+/* ✅ 2. ตามด้วย Tailwind */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 3. สไตล์อื่นๆ ต่อท้ายได้ตามปกติ */
+body {
+  font-family: "Poppins", sans-serif;
+}

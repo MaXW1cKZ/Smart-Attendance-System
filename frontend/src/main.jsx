@@ -2,7 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
-import { GoogleOAuthProvider } from '@react-oauth/google'; // <--- 1. เพิ่มบรรทัดนี้
+import { GoogleOAuthProvider } from '@react-oauth/google';
 
 // 2. เอา Client ID ของคุณมาใส่ตรงนี้
 const GOOGLE_CLIENT_ID = "291635293570-f2ng0herj90g22t9oh05njonaas4l8dj.apps.googleusercontent.com"; 
