@@ -34,6 +34,21 @@ const Sidebar = () => {
           label: "Create Course",
           path: "/teacher/create-course",
         },
+        {
+          icon: <FiBook />,
+          label: "Course Settings",
+          path: "/teacher/course-settings",
+        },
+        {
+          icon: <FiFileText />,
+          label: "Attendance Report",
+          path: "/teacher/attendance-report",
+        },
+        {
+          icon: <FiMonitor />,
+          label: "Device Setup",
+          path: "/teacher/device-setup",
+        },
         { icon: <FiFileText />, label: "Reports", path: "/teacher/reports" }, // หน้าที่ยังไม่สร้าง
       ];
     } else {
@@ -49,7 +64,7 @@ const Sidebar = () => {
           icon: <FiPieChart />,
           label: "My Attendance",
           path: "/student/my-attendance",
-        },
+        }
       ];
     }
   };

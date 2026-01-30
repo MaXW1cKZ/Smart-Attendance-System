@@ -18,6 +18,9 @@ import FaceRegister from "./pages/student/Faceregister"; // เช็คชื�
 // Teacher Pages
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import CreateCourse from "./pages/teacher/CreateCourse";
+import CourseSettings from "./pages/teacher/CourseSettings";
+import AttendanceReport from "./pages/teacher/AttendanceReport";
+import DeviceSetup from "./pages/teacher/DeviceSetup";
 
 // ตัวช่วย Redirect
 const DashboardRedirect = () => {
@@ -76,6 +79,30 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={["teacher", "admin"]}>
               <CreateCourse />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/course-settings"
+          element={
+            <ProtectedRoute allowedRoles={["teacher"]}>
+              <CourseSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/attendance-report"
+          element={
+            <ProtectedRoute allowedRoles={["teacher"]}>
+              <AttendanceReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/device-setup"
+          element={
+            <ProtectedRoute allowedRoles={["teacher"]}>
+              <DeviceSetup />
             </ProtectedRoute>
           }
         />
