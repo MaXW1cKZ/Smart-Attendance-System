@@ -1,24 +1,55 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import Sidebar from "../../components/Sidebar"; // ปรับ path ตามจริง
-import { FiSave, FiX, FiBookOpen, FiLayers, FiCalendar } from "react-icons/fi";
+import Sidebar from "../../components/Sidebar";
+import {
+  FiSave,
+  FiX,
+  FiBook,
+  FiType,
+  FiAlignLeft,
+  FiClock,
+  FiCalendar,
+  FiCheck,
+} from "react-icons/fi";
 
 const CreateCourse = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  // State เก็บข้อมูลฟอร์ม
+  // คำนวณปีปัจจุบัน + 5 ปี
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => currentYear + i);
+
+  // รายชื่อวันสำหรับทำปุ่มกด
+  const daysOptions = [
+    { label: "Mo", value: "Monday" },
+    { label: "Tu", value: "Tuesday" },
+    { label: "We", value: "Wednesday" },
+    { label: "Th", value: "Thursday" },
+    { label: "Fr", value: "Friday" },
+    { label: "Sa", value: "Saturday" },
+    { label: "Su", value: "Sunday" },
+  ];
+
   const [formData, setFormData] = useState({
     course_code: "",
     name: "",
     description: "",
     semester: "1",
-    academic_year: new Date().getFullYear().toString(), // Default ปีปัจจุบัน
+    academic_year: currentYear.toString(),
+    day_of_week: "Monday",
+    start_time: "09:00",
+    end_time: "12:00",
   });
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  // ฟังก์ชันเลือกวันแบบปุ่มกด
+  const handleDaySelect = (dayValue) => {
+    setFormData({ ...formData, day_of_week: dayValue });
   };
 
   const handleSubmit = async (e) => {
@@ -27,155 +58,263 @@ const CreateCourse = () => {
 
     try {
       const token = localStorage.getItem("token");
-      // ⚠️ ยิงไปที่ Backend (เช็ค Port ให้ตรง)
       await axios.post("http://localhost:8000/courses/", formData, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      alert("สร้างรายวิชาสำเร็จ! (Course Created)");
-      navigate("/dashboard"); // หรือพาไปหน้าหน้ารายวิชาทั้งหมด
+      navigate("/teacher/dashboard");
     } catch (error) {
-      console.error("Create course failed", error);
-      alert(
-        "เกิดข้อผิดพลาด: " + (error.response?.data?.detail || "Unknown Error"),
-      );
+      console.error("Error:", error);
+      alert("Error: " + (error.response?.data?.detail || "Unknown Error"));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans">
+    <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
 
-      <main className="flex-1 p-8 overflow-y-auto flex justify-center">
-        <div className="w-full max-w-3xl">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-800">
-              สร้างรายวิชาใหม่
-            </h1>
-            <p className="text-gray-500 mt-2">
-              กรอกข้อมูลเพื่อเปิดรายวิชาสำหรับการเช็คชื่อ
-            </p>
+      <main className="flex-1 overflow-y-auto">
+        {/* Header with Gradient Background */}
+        <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10">
+          <div className="relative z-10 flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">
+                Create New Course
+              </h1>
+              <p className="text-blue-100 opacity-90">
+                Setup your class schedule and details.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate("/teacher/dashboard")}
+              className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-lg backdrop-blur-sm transition"
+            >
+              <FiX size={24} />
+            </button>
           </div>
 
-          {/* Form Card */}
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Row 1: รหัสวิชา & ชื่อวิชา */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="col-span-1">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    รหัสวิชา (Course Code)
-                  </label>
-                  <div className="relative">
-                    <FiLayers className="absolute left-3 top-3.5 text-gray-400" />
-                    <input
-                      type="text"
-                      name="course_code"
-                      required
-                      placeholder="e.g. CS101"
-                      value={formData.course_code}
-                      onChange={handleChange}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                    />
-                  </div>
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    ชื่อวิชา (Course Name)
-                  </label>
-                  <div className="relative">
-                    <FiBookOpen className="absolute left-3 top-3.5 text-gray-400" />
-                    <input
-                      type="text"
-                      name="name"
-                      required
-                      placeholder="e.g. Introduction to Computer Vision"
-                      value={formData.name}
-                      onChange={handleChange}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                    />
-                  </div>
-                </div>
-              </div>
+          {/* Decorative Circles */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+          <div className="absolute bottom-0 left-20 w-32 h-32 bg-blue-500/30 rounded-full blur-2xl"></div>
+        </div>
 
-              {/* Row 2: รายละเอียด */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  รายละเอียด (Description)
-                </label>
-                <textarea
-                  name="description"
-                  rows="4"
-                  placeholder="คำอธิบายรายวิชา..."
-                  value={formData.description}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all resize-none"
-                ></textarea>
-              </div>
+        {/* Form Container (Floating Up) */}
+        <div className="px-10 -mt-16 pb-10 relative z-20">
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* --- LEFT COLUMN: Course Details --- */}
+              <div className="lg:col-span-2 space-y-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+                  <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                      <FiBook />
+                    </span>
+                    Course Information
+                  </h3>
 
-              {/* Row 3: เทอม & ปีการศึกษา */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    ภาคการศึกษา (Semester)
-                  </label>
-                  <select
-                    name="semester"
-                    value={formData.semester}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none bg-white"
-                  >
-                    <option value="1">ภาคเรียนที่ 1</option>
-                    <option value="2">ภาคเรียนที่ 2</option>
-                    <option value="Summer">ภาคฤดูร้อน (Summer)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    ปีการศึกษา (Academic Year)
-                  </label>
-                  <div className="relative">
-                    <FiCalendar className="absolute left-3 top-3.5 text-gray-400" />
-                    <input
-                      type="number"
-                      name="academic_year"
-                      required
-                      value={formData.academic_year}
-                      onChange={handleChange}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                    />
+                  <div className="space-y-5">
+                    {/* Course Code & Name */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                      <div className="md:col-span-1">
+                        <label className="text-sm font-semibold text-gray-600 mb-1.5 block">
+                          Code
+                        </label>
+                        <div className="relative">
+                          <FiType className="absolute top-3.5 left-3 text-gray-400" />
+                          <input
+                            type="text"
+                            name="course_code"
+                            required
+                            placeholder="CS101"
+                            value={formData.course_code}
+                            onChange={handleChange}
+                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border-transparent rounded-xl focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-semibold text-gray-700 placeholder-gray-400"
+                          />
+                        </div>
+                      </div>
+                      <div className="md:col-span-3">
+                        <label className="text-sm font-semibold text-gray-600 mb-1.5 block">
+                          Course Name
+                        </label>
+                        <div className="relative">
+                          <FiBook className="absolute top-3.5 left-3 text-gray-400" />
+                          <input
+                            type="text"
+                            name="name"
+                            required
+                            placeholder="Introduction to Computer Science"
+                            value={formData.name}
+                            onChange={handleChange}
+                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border-transparent rounded-xl focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-semibold text-gray-700 placeholder-gray-400"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <div>
+                      <label className="text-sm font-semibold text-gray-600 mb-1.5 block">
+                        Description
+                      </label>
+                      <div className="relative">
+                        <FiAlignLeft className="absolute top-3.5 left-3 text-gray-400" />
+                        <textarea
+                          name="description"
+                          rows="4"
+                          placeholder="What is this course about?"
+                          value={formData.description}
+                          onChange={handleChange}
+                          className="w-full pl-10 pr-4 py-3 bg-gray-50 border-transparent rounded-xl focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-gray-700 resize-none placeholder-gray-400"
+                        ></textarea>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Buttons */}
-              <div className="flex gap-4 pt-6 border-t border-gray-50 mt-6">
-                <button
-                  type="button"
-                  onClick={() => navigate("/dashboard")}
-                  className="flex-1 py-3 rounded-xl font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
-                >
-                  <FiX /> ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 py-3 rounded-xl font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    "กำลังบันทึก..."
-                  ) : (
-                    <>
-                      <FiSave /> สร้างวิชา
-                    </>
-                  )}
-                </button>
+              {/* --- RIGHT COLUMN: Schedule --- */}
+              <div className="lg:col-span-1 space-y-6">
+                {/* 1. Academic Year & Semester */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                  <h3 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center">
+                      <FiCalendar />
+                    </span>
+                    Term & Year
+                  </h3>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                        Semester
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {["1", "2", "Summer"].map((sem) => (
+                          <div
+                            key={sem}
+                            onClick={() =>
+                              setFormData({ ...formData, semester: sem })
+                            }
+                            className={`cursor-pointer rounded-lg py-2 text-center text-sm font-semibold transition-all border ${
+                              formData.semester === sem
+                                ? "bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-200"
+                                : "bg-white text-gray-500 border-gray-200 hover:border-purple-300 hover:text-purple-600"
+                            }`}
+                          >
+                            {sem === "Summer" ? "Sum" : `Term ${sem}`}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                        Academic Year
+                      </label>
+                      <select
+                        name="academic_year"
+                        value={formData.academic_year}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl font-semibold text-gray-700 focus:ring-2 focus:ring-purple-200 cursor-pointer"
+                      >
+                        {years.map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Schedule (Time & Day) */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                  <h3 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+                      <FiClock />
+                    </span>
+                    Schedule
+                  </h3>
+
+                  {/* Day Selector (Buttons) */}
+                  <div className="mb-6">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 block">
+                      Class Day
+                    </label>
+                    <div className="flex justify-between">
+                      {daysOptions.map((day) => (
+                        <button
+                          type="button"
+                          key={day.value}
+                          onClick={() => handleDaySelect(day.value)}
+                          className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all transform hover:scale-110 ${
+                            formData.day_of_week === day.value
+                              ? "bg-orange-500 text-white shadow-lg shadow-orange-200 ring-2 ring-orange-100"
+                              : "bg-gray-100 text-gray-400 hover:bg-orange-100 hover:text-orange-500"
+                          }`}
+                        >
+                          {day.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Time Inputs */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                        Start
+                      </label>
+                      <input
+                        type="time"
+                        name="start_time"
+                        value={formData.start_time}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 bg-gray-50 rounded-lg text-sm font-bold text-gray-700 focus:bg-white focus:ring-2 focus:ring-orange-200 outline-none border border-transparent focus:border-orange-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                        End
+                      </label>
+                      <input
+                        type="time"
+                        name="end_time"
+                        value={formData.end_time}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 bg-gray-50 rounded-lg text-sm font-bold text-gray-700 focus:bg-white focus:ring-2 focus:ring-orange-200 outline-none border border-transparent focus:border-orange-300"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
-            </form>
-          </div>
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="mt-8 flex justify-end gap-4 pb-10">
+              <button
+                type="button"
+                onClick={() => navigate("/teacher/dashboard")}
+                className="px-6 py-3 rounded-xl font-bold text-gray-500 hover:bg-white hover:text-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-8 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:shadow-blue-300 transform hover:-translate-y-1 transition-all flex items-center gap-2"
+              >
+                {loading ? (
+                  "Saving..."
+                ) : (
+                  <>
+                    <FiCheck size={20} /> Create Course
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       </main>
     </div>
