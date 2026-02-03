@@ -6,34 +6,32 @@ import {
   FiCheckCircle,
   FiLoader,
   FiRefreshCw,
-  FiChevronRight,
   FiUser,
   FiArrowLeft,
   FiArrowRight,
+  FiSmile // เพิ่มไอคอน
 } from "react-icons/fi";
-
-// Import Sidebar
 import Sidebar from "../../components/Sidebar";
 
-// กำหนดขั้นตอนการถ่ายรูป (Config steps)
+// กำหนดขั้นตอนการถ่ายรูป
 const STEPS = [
   {
     id: "straight",
-    label: "หน้าตรง (Straight)",
-    instruction: "มองกล้องตรงๆ ให้เห็นใบหน้าชัดเจน",
-    icon: <FiUser className="text-3xl" />,
+    label: "Straight Face",
+    instruction: "Look straight at the camera.",
+    icon: <FiUser size={24} />,
   },
   {
     id: "left",
-    label: "หันซ้าย (Turn Left)",
-    instruction: "หันหน้าไปทางซ้ายเล็กน้อย (ประมาณ 30-45 องศา)",
-    icon: <FiArrowLeft className="text-3xl" />,
+    label: "Turn Left",
+    instruction: "Turn your face slightly to the left.",
+    icon: <FiArrowLeft size={24} />,
   },
   {
     id: "right",
-    label: "หันขวา (Turn Right)",
-    instruction: "หันหน้าไปทางขวาเล็กน้อย (ประมาณ 30-45 องศา)",
-    icon: <FiArrowRight className="text-3xl" />,
+    label: "Turn Right",
+    instruction: "Turn your face slightly to the right.",
+    icon: <FiArrowRight size={24} />,
   },
 ];
 
@@ -41,15 +39,15 @@ const FaceRegister = () => {
   const webcamRef = useRef(null);
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [capturedImages, setCapturedImages] = useState([]); // เก็บ URL รูปที่ถ่าย
-  const imagesRef = useRef([]); // เก็บ File Object เพื่อส่งหลังบ้าน
+  const [capturedImages, setCapturedImages] = useState([]); 
+  const imagesRef = useRef([]); 
 
   const [isCountDown, setIsCountDown] = useState(false);
   const [count, setCount] = useState(3);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  // ฟังก์ชันเริ่มนับถอยหลังถ่ายรูป
+  // Logic การถ่ายรูป (คงเดิม)
   const handleCaptureClick = () => {
     setIsCountDown(true);
     setCount(3);
@@ -60,20 +58,16 @@ const FaceRegister = () => {
       setCount(timer);
       if (timer === 0) {
         clearInterval(interval);
-        captureFrame(); // ถ่ายรูปจริง
+        captureFrame();
         setIsCountDown(false);
       }
     }, 1000);
   };
 
-  // ฟังก์ชันจับภาพ
   const captureFrame = useCallback(() => {
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
-      // 1. เก็บรูปโชว์
       setCapturedImages((prev) => [...prev, imageSrc]);
-
-      // 2. แปลงเป็นไฟล์รอส่ง
       fetch(imageSrc)
         .then((res) => res.blob())
         .then((blob) => {
@@ -84,20 +78,17 @@ const FaceRegister = () => {
           );
           imagesRef.current.push(file);
 
-          // 3. ไปขั้นตอนถัดไป
           if (currentStepIndex < STEPS.length - 1) {
             setTimeout(() => {
               setCurrentStepIndex((prev) => prev + 1);
-            }, 500); // ดีเลย์นิดนึงให้ user รู้ตัว
+            }, 500);
           } else {
-            // ครบทุกขั้นตอนแล้ว
             uploadImages();
           }
         });
     }
   }, [webcamRef, currentStepIndex]);
 
-  // ฟังก์ชันส่งรูปไป Backend
   const uploadImages = async () => {
     setIsUploading(true);
     const formData = new FormData();
@@ -113,11 +104,10 @@ const FaceRegister = () => {
           Authorization: `Bearer ${token}`,
         },
       });
-
       setIsSuccess(true);
     } catch (error) {
       console.error("Upload failed", error);
-      alert("เกิดข้อผิดพลาดในการอัปโหลด กรุณาลองใหม่");
+      alert("Error uploading images. Please try again.");
       resetProcess();
     } finally {
       setIsUploading(false);
@@ -135,145 +125,155 @@ const FaceRegister = () => {
   const currentStep = STEPS[currentStepIndex];
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans">
+    <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
 
-      <main className="flex-1 p-6 md:p-10 flex flex-col items-center justify-center overflow-y-auto">
-        {/* Header Section */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">ลงทะเบียนใบหน้า</h1>
-          <p className="text-gray-500 mt-2">
-            กรุณาทำตามขั้นตอนเพื่อความแม่นยำในการเช็คชื่อ
-          </p>
+      <main className="flex-1 overflow-y-auto">
+        {/* --- Header Section (Gradient Theme) --- */}
+        <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10 pb-24">
+          <div className="relative z-10">
+            <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+               <FiSmile className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm" size={36} />
+               Face Registration
+            </h1>
+            <p className="text-blue-100 opacity-90 pl-1">
+               Register your face ID for automated attendance checking.
+            </p>
+          </div>
+          
+          {/* Decorative Circles */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none"></div>
+          <div className="absolute bottom-0 left-20 w-32 h-32 bg-blue-500/30 rounded-full blur-2xl pointer-events-none"></div>
         </div>
 
-        <div className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100 w-full max-w-5xl flex flex-col md:flex-row gap-10">
-          {/* --- Left: Camera Section --- */}
-          <div className="flex-1 flex flex-col items-center">
-            <div className="relative w-full aspect-[4/3] bg-gray-900 rounded-2xl overflow-hidden shadow-inner border-4 border-white ring-4 ring-gray-100">
-              {!isSuccess ? (
-                <>
-                  <Webcam
-                    audio={false}
-                    ref={webcamRef}
-                    screenshotFormat="image/jpeg"
-                    videoConstraints={{ facingMode: "user" }}
-                    className="w-full h-full object-cover mirror-mode"
-                    mirrored={true}
-                  />
+        {/* --- Floating Content Container --- */}
+        <div className="px-10 -mt-20 pb-10 relative z-20">
+          <div className="bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-gray-100 p-8 md:p-10 flex flex-col md:flex-row gap-10 min-h-[600px]">
+            
+            {/* --- Left: Camera View --- */}
+            <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 rounded-2xl border border-gray-200 p-4 relative overflow-hidden">
+               {/* Decorative Line Top */}
+               <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-blue-400 to-indigo-400"></div>
 
-                  {/* Overlay Guide (วงกลมหน้า) */}
-                  <div className="absolute inset-0 border-2 border-dashed border-white/30 rounded-2xl flex items-center justify-center pointer-events-none">
-                    <div
-                      className={`w-64 h-80 border-4 rounded-[50%] transition-colors duration-300 ${isCountDown ? "border-red-500 scale-105" : "border-blue-400/70"}`}
-                    ></div>
-                  </div>
-
-                  {/* Countdown Number */}
-                  {isCountDown && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm z-20">
-                      <span className="text-9xl font-bold text-white animate-bounce drop-shadow-lg">
-                        {count}
-                      </span>
+               <div className="relative w-full max-w-lg aspect-[4/3] bg-black rounded-xl overflow-hidden shadow-md ring-4 ring-white">
+                  {!isSuccess ? (
+                    <>
+                      <Webcam
+                        audio={false}
+                        ref={webcamRef}
+                        screenshotFormat="image/jpeg"
+                        videoConstraints={{ facingMode: "user" }}
+                        className="w-full h-full object-cover mirror-mode"
+                        mirrored={true}
+                      />
+                      {/* Overlay Guide */}
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className={`w-56 h-72 border-2 border-dashed rounded-[50%] transition-all duration-300 ${isCountDown ? "border-rose-500 scale-105" : "border-white/50"}`}></div>
+                      </div>
+                      
+                      {/* Countdown */}
+                      {isCountDown && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-20">
+                          <span className="text-8xl font-bold text-white animate-bounce drop-shadow-lg">
+                            {count}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="absolute inset-0 bg-emerald-50 flex flex-col items-center justify-center text-emerald-600">
+                      <div className="p-4 bg-emerald-100 rounded-full mb-4">
+                         <FiCheckCircle className="text-6xl" />
+                      </div>
+                      <h2 className="text-2xl font-bold">Registration Complete!</h2>
+                      <p className="text-emerald-500 mt-2">Your face data has been saved.</p>
                     </div>
                   )}
-                </>
-              ) : (
-                <div className="absolute inset-0 bg-green-50 flex flex-col items-center justify-center text-green-600">
-                  <FiCheckCircle className="text-8xl mb-4" />
-                  <h2 className="text-2xl font-bold">ลงทะเบียนสำเร็จ!</h2>
-                  <p>ข้อมูลใบหน้าของคุณถูกบันทึกเรียบร้อยแล้ว</p>
-                </div>
-              )}
+               </div>
+
+               {/* Instruction Text Below Camera */}
+               {!isSuccess && (
+                 <div className="mt-6 text-center">
+                    <h3 className="text-xl font-bold text-gray-800 flex items-center justify-center gap-2">
+                       {currentStep.icon} {currentStep.label}
+                    </h3>
+                    <p className="text-gray-500 mt-1 text-sm">{currentStep.instruction}</p>
+                 </div>
+               )}
             </div>
 
-            {/* Status Text under Camera */}
-            {!isSuccess && (
-              <div className="mt-6 text-center">
-                <div className="text-blue-600 font-bold text-xl flex items-center justify-center gap-2">
-                  {currentStep.icon} {currentStep.label}
-                </div>
-                <p className="text-gray-500">{currentStep.instruction}</p>
-              </div>
-            )}
-          </div>
+            {/* --- Right: Steps & Controls --- */}
+            <div className="w-full md:w-80 flex flex-col justify-between">
+                
+                {/* Steps List */}
+                <div>
+                   <h3 className="text-lg font-bold text-gray-800 mb-4 border-b border-gray-100 pb-2">
+                      Progress Steps
+                   </h3>
+                   <div className="space-y-3">
+                      {STEPS.map((step, index) => (
+                        <div
+                          key={step.id}
+                          className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                            index === currentStepIndex
+                              ? "bg-blue-50 border-blue-200 text-blue-700 shadow-sm ring-1 ring-blue-100"
+                              : index < currentStepIndex
+                                ? "bg-emerald-50 border-emerald-100 text-emerald-600"
+                                : "bg-gray-50 border-gray-100 text-gray-400 opacity-60"
+                          }`}
+                        >
+                          {/* Step Number / Check Icon */}
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0 ${
+                             index === currentStepIndex ? "bg-blue-600 text-white" :
+                             index < currentStepIndex ? "bg-emerald-500 text-white" : "bg-gray-200 text-gray-500"
+                          }`}>
+                             {index < currentStepIndex ? <FiCheckCircle /> : index + 1}
+                          </div>
 
-          {/* --- Right: Controls & Progress --- */}
-          <div className="w-full md:w-80 flex flex-col gap-6">
-            {/* Step Indicators */}
-            <div className="space-y-3">
-              <h3 className="font-bold text-gray-700 mb-2">ขั้นตอน (Steps)</h3>
-              {STEPS.map((step, index) => (
-                <div
-                  key={step.id}
-                  className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                    index === currentStepIndex
-                      ? "bg-blue-50 border-blue-200 text-blue-700 shadow-sm"
-                      : index < currentStepIndex
-                        ? "bg-green-50 border-green-200 text-green-700"
-                        : "bg-gray-50 border-gray-100 text-gray-400"
-                  }`}
-                >
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      index === currentStepIndex
-                        ? "bg-blue-600 text-white"
-                        : index < currentStepIndex
-                          ? "bg-green-500 text-white"
-                          : "bg-gray-200"
-                    }`}
-                  >
-                    {index < currentStepIndex ? <FiCheckCircle /> : index + 1}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm">{step.label}</p>
-                  </div>
-                  {/* Show captured thumbnail */}
-                  {capturedImages[index] && (
-                    <img
-                      src={capturedImages[index]}
-                      className="w-10 h-10 rounded-lg object-cover border border-gray-200"
-                      alt="mini"
-                    />
-                  )}
+                          <div className="flex-1 min-w-0">
+                             <p className="font-semibold text-sm truncate">{step.label}</p>
+                             <p className="text-xs opacity-80 truncate">{index === currentStepIndex ? "In Progress..." : index < currentStepIndex ? "Completed" : "Waiting"}</p>
+                          </div>
+                          
+                          {/* Thumbnail Preview */}
+                          {capturedImages[index] && (
+                             <img src={capturedImages[index]} className="w-10 h-10 rounded-md object-cover border border-gray-200 shadow-sm" alt="captured" />
+                          )}
+                        </div>
+                      ))}
+                   </div>
                 </div>
-              ))}
-            </div>
 
-            <div className="mt-auto">
-              {/* ปุ่มกดถ่าย */}
-              {!isSuccess ? (
-                <button
-                  onClick={handleCaptureClick}
-                  disabled={isCountDown || isUploading}
-                  className={`w-full py-4 rounded-2xl font-bold text-lg shadow-lg transform transition-all hover:-translate-y-1 flex items-center justify-center gap-2
-                                ${
-                                  isCountDown
-                                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                                    : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-blue-200"
-                                }`}
-                >
-                  {isUploading ? (
-                    <>
-                      <FiLoader className="animate-spin" /> กำลังบันทึก...
-                    </>
-                  ) : isCountDown ? (
-                    "เตรียมตัว..."
-                  ) : (
-                    <>
-                      <FiCamera /> ถ่ายภาพ ({currentStepIndex + 1}/
-                      {STEPS.length})
-                    </>
-                  )}
-                </button>
-              ) : (
-                <button
-                  onClick={resetProcess}
-                  className="w-full py-4 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors"
-                >
-                  <FiRefreshCw /> ลงทะเบียนใหม่
-                </button>
-              )}
+                {/* Control Buttons */}
+                <div className="mt-8 pt-6 border-t border-gray-100">
+                   {!isSuccess ? (
+                      <button
+                        onClick={handleCaptureClick}
+                        disabled={isCountDown || isUploading}
+                        className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg transform transition-all hover:-translate-y-1 flex items-center justify-center gap-2
+                           ${isCountDown 
+                             ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none" 
+                             : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-blue-200 hover:from-blue-700 hover:to-indigo-700"
+                           }`}
+                      >
+                        {isUploading ? (
+                          <><FiLoader className="animate-spin" /> Processing...</>
+                        ) : isCountDown ? (
+                          "Get Ready..."
+                        ) : (
+                          <><FiCamera /> Capture Photo</>
+                        )}
+                      </button>
+                   ) : (
+                      <button
+                        onClick={resetProcess}
+                        className="w-full py-4 bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <FiRefreshCw /> Register Again
+                      </button>
+                   )}
+                </div>
+
             </div>
           </div>
         </div>
