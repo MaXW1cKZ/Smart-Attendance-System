@@ -2,10 +2,13 @@
 .DS_Store
 .vscode/
 .idea/
+Thumbs.db
 
 # --- Environment Variables (ห้ามหลุดเด็ดขาด) ---
 .env
-.env.local
+.env.*.local
+*.pem
+*.key
 
 # --- Backend (Python) ---
 backend/venv/
@@ -13,6 +16,13 @@ backend/__pycache__/
 *.pyc
 *.pyo
 *.pyd
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Upload ---
+backend/uploads/faces/
 
 # --- Frontend (Node/React) ---
 frontend/node_modules/

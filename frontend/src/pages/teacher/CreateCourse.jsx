@@ -77,7 +77,7 @@ const CreateCourse = () => {
 
       <main className="flex-1 overflow-y-auto">
         {/* Header with Gradient Background */}
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-48 relative px-10 pt-10">
+        <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10">
           <div className="relative z-10 flex justify-between items-start">
             <div>
               <h1 className="text-3xl font-bold text-white mb-2">
