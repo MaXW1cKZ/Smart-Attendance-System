@@ -34,6 +34,7 @@ const CreateCourse = () => {
 
   const [formData, setFormData] = useState({
     course_code: "",
+    section: "",
     name: "",
     description: "",
     semester: "1",
@@ -114,8 +115,9 @@ const CreateCourse = () => {
                   </h3>
 
                   <div className="space-y-5">
-                    {/* Course Code & Name */}
+                    {/* Course Code & Section & Name */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                      {/* 1. รหัสวิชา (Code) */}
                       <div className="md:col-span-1">
                         <label className="text-sm font-semibold text-gray-600 mb-1.5 block">
                           Code
@@ -133,7 +135,30 @@ const CreateCourse = () => {
                           />
                         </div>
                       </div>
-                      <div className="md:col-span-3">
+
+                      {/* 2. ✅ เพิ่มช่อง Section ตรงนี้ */}
+                      <div className="md:col-span-1">
+                        <label className="text-sm font-semibold text-gray-600 mb-1.5 block">
+                          Section
+                        </label>
+                        <div className="relative">
+                          <div className="absolute top-3.5 left-3 text-gray-400 font-bold text-xs">
+                            Sec
+                          </div>
+                          <input
+                            type="text"
+                            name="section"
+                            required
+                            placeholder="1"
+                            value={formData.section}
+                            onChange={handleChange}
+                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border-transparent rounded-xl focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-semibold text-gray-700 text-center"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 3. ชื่อวิชา (Name) - ปรับให้เหลือ 2 ส่วน */}
+                      <div className="md:col-span-2">
                         <label className="text-sm font-semibold text-gray-600 mb-1.5 block">
                           Course Name
                         </label>

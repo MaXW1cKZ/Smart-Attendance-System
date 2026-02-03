@@ -19,10 +19,14 @@ router = APIRouter()
 # --- Schemas (ใช้เฉพาะในไฟล์นี้ หรือจะแยกไป folder schemas ก็ได้) ---
 class CourseCreate(BaseModel):
     course_code: str
+    section: str
     name: str
     description: str = None
     semester: str
     academic_year: str
+    day_of_week: str
+    start_time: str
+    end_time: str
 
 
 class CourseResponse(CourseCreate):

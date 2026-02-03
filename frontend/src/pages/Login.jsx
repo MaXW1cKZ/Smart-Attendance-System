@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
 import axios from "axios";
+import facial from "../assets/facial.gif";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -76,15 +77,17 @@ const Login = () => {
   // --- UI ---
   return (
     <div className="flex h-screen w-full bg-white font-sans overflow-hidden">
-      {/* Left Side - Image */}
-      <div className="hidden lg:flex w-1/2 bg-blue-50 items-center justify-center relative overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 w-[800px] h-[800px] bg-blue-200/50 rounded-full blur-3xl mix-blend-multiply animate-blob"></div>
-        <div className="absolute top-1/3 right-1/4 w-[600px] h-[600px] bg-purple-200/50 rounded-full blur-3xl mix-blend-multiply animate-blob animation-delay-2000"></div>
-        <img
-          src="https://img.freepik.com/free-vector/biometric-security-abstract-concept-illustration_335657-3882.jpg?t=st=1735715581~exp=1735719181~hmac=4d335078b64432b874d6428970f451404022585657477751211987835218830c&w=1380"
-          alt="Face Recognition"
-          className="relative z-10 w-4/5 h-auto object-contain drop-shadow-2xl hover:scale-105 transition-transform duration-500"
-        />
+      {/* Left Side - Image Section (Black Theme) */}
+      {/* ⭐ แก้ไข 1: เปลี่ยนพื้นหลังเป็น bg-black (ดำสนิท) */}
+      <div className="hidden lg:flex w-1/2 relative bg-black items-center justify-center overflow-hidden">
+        {/* ⭐ แก้ไข 2: ส่วนจัดการรูปภาพ */}
+        <div className="relative z-10 w-full max-w-2xl p-4">
+          <img
+            src={facial}
+            alt="Facial Scan Animation"
+            className="w-full h-full object-contain"
+          />
+        </div>
       </div>
 
       {/* Right Side - Login Form */}
