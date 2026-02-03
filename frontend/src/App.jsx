@@ -14,6 +14,7 @@ import Login from "./pages/Login"; // อย่าลืมสร้างหร
 // Student Pages
 import StudentDashboard from "./pages/student/StudentDashboard";
 import FaceRegister from "./pages/student/Faceregister"; // เช็คชื่อไฟล์ดีๆ (F ตัวใหญ่หรือเล็ก)
+import Stu_Attendance from "./pages/student/s_AttendanceReport";
 
 // Teacher Pages
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
@@ -22,9 +23,17 @@ import CourseSettings from "./pages/teacher/CourseSettings";
 import AttendanceReport from "./pages/teacher/AttendanceReport";
 import DeviceSetup from "./pages/teacher/DeviceSetup";
 
+// Admin Pages
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import UserManagement from "./pages/admin/UserManagement";
+import SystemSettings from "./pages/admin/SystemSettings";
+import StudentAttendanceHistory from "./pages/admin/StudentAttendanceHistory";
+import AdminRealTimeReport from "./pages/admin/AdminRealtimeReport";
+
 // ตัวช่วย Redirect
 const DashboardRedirect = () => {
   const role = localStorage.getItem("role");
+  if (role === "admin") return <Navigate to="/admin/dashboard" replace />;
   if (role === "teacher") return <Navigate to="/teacher/dashboard" replace />;
   if (role === "student") return <Navigate to="/student/dashboard" replace />;
   return <Navigate to="/" replace />; // ถ้าไม่มี Role เด้งออกไป Login
@@ -64,6 +73,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/student/stu-attendance"
+          element={
+            <ProtectedRoute allowedRoles={["student"]}>
+              <Stu_Attendance />
+            </ProtectedRoute>
+          }
+        />
 
         {/* 4. Zone อาจารย์ */}
         <Route
@@ -95,6 +112,7 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={["teacher"]}>
               <AttendanceReport />
+              
             </ProtectedRoute>
           }
         />
@@ -103,6 +121,47 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={["teacher"]}>
               <DeviceSetup />
+            </ProtectedRoute>
+          }
+        />
+        {/* 6. Zone ผู้ดูแลระบบ */}
+        <Route
+          path="/admin/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/user-management"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <UserManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/system-settings"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <SystemSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/student-attendance-history"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <StudentAttendanceHistory />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/realtime-report"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <AdminRealTimeReport />
             </ProtectedRoute>
           }
         />
