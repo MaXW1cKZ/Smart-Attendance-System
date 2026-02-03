@@ -8,11 +8,15 @@ class Course(Base):
     __tablename__ = "courses"
 
     id = Column(Integer, primary_key=True, index=True)
-    course_code = Column(String, unique=True, index=True, nullable=False)
+    course_code = Column(String, index=True, nullable=False)
+    section = Column(String, nullable=True, default="1")
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     semester = Column(String, nullable=False)
     academic_year = Column(String, nullable=False)
+    day_of_week = Column(String, nullable=True)
+    start_time = Column(String, nullable=True)
+    end_time = Column(String, nullable=True)
 
     teacher_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

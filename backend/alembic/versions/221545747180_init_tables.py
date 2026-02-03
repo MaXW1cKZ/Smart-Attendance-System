@@ -9,7 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-import pgvector
+from pgvector.sqlalchemy import Vector
 
 
 # revision identifiers, used by Alembic.
@@ -53,7 +53,7 @@ def upgrade() -> None:
     op.create_table('face_embeddings',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('embedding_vector', pgvector.sqlalchemy.Vector(dim=512), nullable=False),
+    sa.Column('embedding_vector', Vector(dim=512), nullable=False),
     sa.Column('image_path', sa.String(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
