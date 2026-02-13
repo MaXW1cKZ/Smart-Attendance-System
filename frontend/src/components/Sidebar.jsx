@@ -41,6 +41,11 @@ const Sidebar = () => {
 
     if (role === "teacher" || role === "admin") {
       return [
+        {
+          icon: <FiMonitor />,
+          label: "Start Session",
+          path: "/teacher/device-setup",
+        },
         { icon: <FiHome />, label: "Dashboard", path: "/teacher/dashboard" },
         {
           icon: <FiBook />,
@@ -56,11 +61,6 @@ const Sidebar = () => {
           icon: <FiFileText />,
           label: "Attendance Report",
           path: "/teacher/attendance-report",
-        },
-        {
-          icon: <FiMonitor />,
-          label: "Device Setup",
-          path: "/teacher/device-setup",
         },
         { icon: <FiFileText />, label: "Reports", path: "/teacher/reports" }, // หน้าที่ยังไม่สร้าง
       ];
