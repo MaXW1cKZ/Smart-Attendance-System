@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react"; // ✅ Import useEffect เพิ่ม
 import Sidebar from "../../components/Sidebar";
 import {
   FiMapPin,
@@ -16,9 +16,20 @@ const DeviceSetup = () => {
   const [config, setConfig] = useState({
     room: "M22",
     course: "Smart Attendance AI",
-    date: new Date().toISOString().split('T')[0], // วันที่ปัจจุบัน YYYY-MM-DD
+    date: new Date().toISOString().split('T')[0],
     device: "Raspie WebCam"
   });
+
+  // ✅ State สำหรับนาฬิกา
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // ✅ Effect สำหรับเดินเวลาทุก 1 วินาที
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
@@ -27,14 +38,30 @@ const DeviceSetup = () => {
       <main className="flex-1 overflow-y-auto">
         {/* --- 1. Header Section (Gradient Style) --- */}
         <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10 pb-24">
-          <div className="relative z-10">
-            <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-              <FiSettings className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm" size={36} />
-              System Configuration
-            </h1>
-            <p className="text-blue-100 opacity-90 pl-1">
-              Setup your classroom environment before starting the session.
-            </p>
+          
+          <div className="relative z-10 flex justify-between items-start"> {/* ✅ ปรับเป็น flex เพื่อจัดตำแหน่ง */}
+            
+            {/* Title Section */}
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+                <FiSettings className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm" size={36} />
+                System Configuration
+              </h1>
+              <p className="text-blue-100 opacity-90 pl-1">
+                Setup your classroom environment before starting the session.
+              </p>
+            </div>
+
+            {/* ✅ Clock Section (ส่วนที่เพิ่มใหม่) */}
+            <div className="text-right hidden md:block">
+               <div className="text-4xl font-mono font-bold text-white drop-shadow-md tracking-wider">
+                  {currentTime.toLocaleTimeString('en-US', { hour12: false })}
+               </div>
+               <div className="text-blue-200 text-sm font-medium mt-1 uppercase tracking-wide opacity-80">
+                  {currentTime.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+               </div>
+            </div>
+
           </div>
 
           {/* Decorative Circles */}
@@ -81,7 +108,7 @@ const DeviceSetup = () => {
               {/* 3. Choose Date */}
               <SelectionCard 
                 label="Step 3: Date"
-                value={config.date} // แสดงวันที่
+                value={config.date}
                 icon={<FiCalendar size={24}/>}
                 color="text-amber-600"
                 bgColor="bg-amber-50"
