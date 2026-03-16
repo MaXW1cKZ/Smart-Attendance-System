@@ -244,10 +244,10 @@ async def enroll_course(
     return {"message": "Enrolled successfully"}
 
 
-# ── Session Endpoints ─────────────────────────────────────────────────────────
+# Session Endpoints
 
 
-# 7. Start new session (Plan B — teacher presses Start)
+# Start new session (Plan B — teacher presses Start)
 @router.post("/sessions/start")
 async def start_new_session(
     req: StartSessionRequest,
@@ -314,7 +314,7 @@ async def start_new_session(
     }
 
 
-# 8. End session — set actual_end_time, mark absent for no-shows
+# End session — set actual_end_time, mark absent for no-shows
 @router.post("/sessions/{session_id}/end")
 async def end_session(
     session_id: int,
@@ -372,7 +372,19 @@ async def end_session(
     }
 
 
-# 9. List sessions of a course
+@router.get("/courses/all", response_model=List[CourseResponse])
+async def get_all_courses(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Admin only — returns every course in the system."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    result = await db.execute(select(Course).order_by(Course.name))
+    return result.scalars().all()
+
+
+# List sessions of a course
 @router.get("/courses/{course_id}/sessions")
 async def get_course_sessions(
     course_id: int,
@@ -511,7 +523,7 @@ async def get_session_attendance(
     }
 
 
-# 12. Manual status override
+# Manual status override
 @router.patch("/attendance/{attendance_id}")
 async def update_attendance_status(
     attendance_id: int,
@@ -527,7 +539,11 @@ async def update_attendance_status(
     att = result.scalars().first()
     if not att:
         raise HTTPException(status_code=404, detail="Attendance record not found")
-    if att.session.course.teacher_id != current_user.id:
+
+    # Admin can edit any record; teacher can only edit their own course
+    is_admin = current_user.role == "admin"
+    is_owner = att.session.course.teacher_id == current_user.id
+    if not is_admin and not is_owner:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     new_status = data.get("status")

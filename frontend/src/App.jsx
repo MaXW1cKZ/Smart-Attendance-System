@@ -1,4 +1,3 @@
-// src/App.jsx
 import React from "react";
 import {
   BrowserRouter as Router,
@@ -7,17 +6,16 @@ import {
   Navigate,
 } from "react-router-dom";
 
-// Components
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 
-// Student Pages
+// Student
 import StudentDashboard from "./pages/student/StudentDashboard";
 import FaceRegister from "./pages/student/Faceregister";
 import Stu_Attendance from "./pages/student/s_AttendanceReport";
 import StudentEnroll from "./pages/student/StudentEnroll";
 
-// Teacher Pages
+// Teacher
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import CreateCourse from "./pages/teacher/CreateCourse";
 import CourseSettings from "./pages/teacher/CourseSettings";
@@ -26,23 +24,17 @@ import DeviceSetup from "./pages/teacher/DeviceSetup";
 import RealTimeAttendance from "./pages/teacher/RealTimeAttendance";
 import EnrolledStudents from "./pages/teacher/EnrolledStudents";
 
-// Admin Pages
+// Admin
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import UserManagement from "./pages/admin/UserManagement";
-import SystemSettings from "./pages/admin/SystemSettings";
-import StudentAttendanceHistory from "./pages/admin/StudentAttendanceHistory";
-import AdminRealTimeReport from "./pages/admin/AdminRealtimeReport";
+import CourseOverview from "./pages/admin/CourseOverview";
+import ActivityLog from "./pages/admin/Activitylog";
 
-// ตัวช่วย Redirect
 const DashboardRedirect = () => {
   const role = localStorage.getItem("role");
   if (role === "admin") return <Navigate to="/admin/dashboard" replace />;
   if (role === "teacher") return <Navigate to="/teacher/dashboard" replace />;
   if (role === "student") return <Navigate to="/student/dashboard" replace />;
-  if (role === "admin") return <Navigate to="/teacher/dashboard" replace />; // หรือ admin dashboard
-
-  // ⚠️ ถ้าไม่เข้าเคสไหนเลย (เช่น role หาย หรือ role เป็น undefined)
-  // ต้องล้าง Token ทิ้ง ก่อนส่งกลับไป Login เพื่อป้องกัน Loop
   localStorage.clear();
   return <Navigate to="/" replace />;
 };
@@ -51,10 +43,7 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* 1. หน้า Login (Public) */}
         <Route path="/" element={<Login />} />
-
-        {/* 2. ตัวกลางแยกทาง (Redirector) */}
         <Route
           path="/dashboard"
           element={
@@ -64,7 +53,7 @@ function App() {
           }
         />
 
-        {/* 3. Zone นักเรียน */}
+        {/* ── Student ── */}
         <Route
           path="/student/dashboard"
           element={
@@ -98,11 +87,11 @@ function App() {
           }
         />
 
-        {/* 4. Zone อาจารย์ */}
+        {/* ── Teacher ── */}
         <Route
           path="/teacher/dashboard"
           element={
-            <ProtectedRoute allowedRoles={["teacher", "admin"]}>
+            <ProtectedRoute allowedRoles={["teacher"]}>
               <TeacherDashboard />
             </ProtectedRoute>
           }
@@ -110,7 +99,7 @@ function App() {
         <Route
           path="/teacher/create-course"
           element={
-            <ProtectedRoute allowedRoles={["teacher", "admin"]}>
+            <ProtectedRoute allowedRoles={["teacher"]}>
               <CreateCourse />
             </ProtectedRoute>
           }
@@ -149,9 +138,14 @@ function App() {
         />
         <Route
           path="/teacher/course/:courseId/students"
-          element={<EnrolledStudents />}
+          element={
+            <ProtectedRoute allowedRoles={["teacher"]}>
+              <EnrolledStudents />
+            </ProtectedRoute>
+          }
         />
-        {/* 6. Zone ผู้ดูแลระบบ */}
+
+        {/* ── Admin ── */}
         <Route
           path="/admin/dashboard"
           element={
@@ -161,7 +155,7 @@ function App() {
           }
         />
         <Route
-          path="/admin/user-management"
+          path="/admin/users"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
               <UserManagement />
@@ -169,31 +163,38 @@ function App() {
           }
         />
         <Route
-          path="/admin/system-settings"
+          path="/admin/courses"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
-              <SystemSettings />
+              <CourseOverview />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/admin/student-attendance-history"
+          path="/admin/logs"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
-              <StudentAttendanceHistory />
+              <ActivityLog />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/admin/realtime-report"
+          path="/admin/create-course"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
-              <AdminRealTimeReport />
+              <CreateCourse />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/attendance-report"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <AttendanceReport />
             </ProtectedRoute>
           }
         />
 
-        {/* 5. ถ้าพิมพ์มั่วๆ ให้ดีดกลับไปหน้าแรก */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

@@ -11,23 +11,22 @@ from sqlalchemy.future import select
 from dotenv import load_dotenv
 
 from app.core.database import get_db
-from app.models.users import User  # Import Model DB
+from app.models.users import User
 
-# ✅ 1. โหลดค่าจาก .env
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey123")  # ถ้าหาไม่เจอจะใช้ค่า Default
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey123")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
-# ตั้งค่า Password Hashing
+# Password Hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# ตั้งค่าตัวดึง Token จาก Header (Bearer Token)
+# Token from Header (Bearer Token)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
-# --- ฟังก์ชันพื้นฐาน ---
+# Function
 def verify_password(plain_password, hashed_password):
     if not hashed_password:
         return False
@@ -49,7 +48,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 
-# --- ✅ ฟังก์ชันพระเอก (ที่ Error ถามหา) ---
 async def get_current_user(
     token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
 ):
@@ -59,7 +57,6 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        # 1. แกะ Token ดู Email
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
@@ -67,7 +64,6 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    # 2. ค้นหา User ใน Database
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalars().first()
 
