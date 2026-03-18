@@ -265,7 +265,6 @@ apt install certbot python3-certbot-nginx
 certbot --nginx -d your-domain.kmitl.ac.th
 ```
 
-<<<<<<< HEAD
 **Face Register ใช้ไม่ได้ (Loading AI...)**
 - ตรวจสอบว่ามีไฟล์ model ใน `frontend/public/models/`
 - ต้องมีทั้ง `*-weights_manifest.json` และ `*-shard1`
@@ -279,4 +278,3 @@ certbot --nginx -d your-domain.kmitl.ac.th
 ssl_certificate /etc/letsencrypt/live/your-domain/fullchain.pem;
 ssl_certificate_key /etc/letsencrypt/live/your-domain/privkey.pem;
 ```
->>>>>>> 272bae3 (Update README.md)
