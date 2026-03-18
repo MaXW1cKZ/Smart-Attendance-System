@@ -11,9 +11,11 @@
 | Frontend | React 18, Vite, TailwindCSS, face-api.js |
 | Backend | FastAPI, SQLAlchemy (Async), Python 3.11 |
 | Database | PostgreSQL 16 + pgvector |
-| AI | DeepFace (ArcFace model) |
+| AI | InsightFace (ArcFace model) + ONNX Runtime |
 | Auth | JWT + Google OAuth 2.0 |
 | Deploy | Docker, Docker Compose, Nginx |
+
+> **หมายเหตุ:** ใช้ InsightFace + ONNX Runtime แทน DeepFace + TensorFlow เพื่อรองรับ CPU ที่ไม่มี AVX instruction set (เช่น KVM server)
 
 ---
 
@@ -23,7 +25,7 @@
 Smart-Attendance-System/
 ├── backend/                  ← FastAPI
 │   ├── app/
-│   │   ├── api/              ← Routers (auth, users, courses, ...)
+│   │   ├── api/              ← Routers (auth, users, courses, face_register, attendance_check)
 │   │   ├── core/             ← database.py, security.py
 │   │   ├── models/           ← SQLAlchemy models
 │   │   ├── schemas/          ← Pydantic schemas
@@ -40,7 +42,8 @@ Smart-Attendance-System/
 │   ├── Dockerfile
 │   └── nginx-frontend.conf
 ├── nginx/
-│   └── nginx.conf            ← Reverse proxy config
+│   ├── nginx.conf            ← Reverse proxy + SSL config
+│   └── ssl/                  ← SSL certificates (ห้าม commit!)
 ├── docker-compose.yml
 ├── .env                      ← ห้าม commit!
 ├── .env.example
@@ -54,7 +57,7 @@ Smart-Attendance-System/
 ### 1. Clone โปรเจค
 
 ```bash
-git clone https://github.com/your-repo/Smart-Attendance-System.git
+git clone https://github.com/MaXW1cKZ/Smart-Attendance-System.git
 cd Smart-Attendance-System
 ```
 
@@ -98,11 +101,9 @@ docker compose up --build
 
 เข้าเว็บได้ที่ `http://localhost`
 
-> **หมายเหตุ:** build ครั้งแรกใช้เวลานาน (~10-20 นาที) เพราะ DeepFace ต้องดาวน์โหลด TensorFlow
-
 ---
 
-## Deploy บน Server
+## Deploy บน Server (HTTPS)
 
 ### ข้อมูล Server
 
@@ -110,6 +111,7 @@ docker compose up --build
 |--------|-----|
 | IP | 10.72.0.167 |
 | User | it-student |
+| URL | https://10.72.0.167.nip.io |
 
 ### ขั้นตอน
 
@@ -127,7 +129,7 @@ newgrp docker
 
 **3. Clone โค้ด**
 ```bash
-git clone https://github.com/your-repo/Smart-Attendance-System.git
+git clone https://github.com/MaXW1cKZ/Smart-Attendance-System.git
 cd Smart-Attendance-System
 ```
 
@@ -135,16 +137,27 @@ cd Smart-Attendance-System
 ```bash
 cp .env.example .env
 nano .env   # แก้ค่าให้ครบ
-
 echo "VITE_API_URL=/api" > frontend/.env.local
 ```
 
-**5. Deploy**
+**5. สร้าง SSL Certificate (Self-signed)**
+```bash
+mkdir -p nginx/ssl
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout nginx/ssl/key.pem \
+  -out nginx/ssl/cert.pem \
+  -subj "/CN=10.72.0.167.nip.io" \
+  -addext "subjectAltName=DNS:10.72.0.167.nip.io,IP:10.72.0.167"
+```
+
+**6. Deploy**
 ```bash
 docker compose up -d --build
 ```
 
-เข้าเว็บได้ที่ `http://10.72.0.167`
+เข้าเว็บได้ที่ `https://10.72.0.167.nip.io`
+
+> **หมายเหตุ:** Browser จะแจ้งเตือน "Not Secure" ครั้งแรก ให้กด Advanced → Proceed ได้เลย เพราะใช้ Self-signed certificate
 
 ---
 
@@ -154,10 +167,25 @@ docker compose up -d --build
 2. เลือกโปรเจค → **APIs & Services** → **Credentials**
 3. เพิ่มใน **Authorized JavaScript origins**:
    - `http://localhost` (สำหรับ dev)
-   - `http://your-domain.it.kmitl.ac.th` (สำหรับ production)
+   - `https://10.72.0.167.nip.io` (สำหรับ production)
 4. กด **Save**
 
 > **หมายเหตุ:** Google ไม่รองรับ IP address โดยตรง ต้องใช้ domain name เท่านั้น
+
+---
+
+## การแก้ปัญหาที่พบบน KVM Server (ไม่มี AVX)
+
+Server KVM รุ่นเก่าที่มี CPU รองรับแค่ SSE/SSE2 จะ crash เมื่อรัน TensorFlow (exit code 132 = Illegal Instruction)
+
+**วิธีแก้:** โปรเจคนี้ใช้ **InsightFace + ONNX Runtime** แทน DeepFace + TensorFlow ซึ่งไม่ต้องการ AVX และให้ ArcFace embedding 512 มิติเหมือนกัน
+
+ตรวจสอบ CPU ของ server:
+```bash
+grep flags /proc/cpuinfo | head -1 | tr ' ' '\n' | grep -E 'avx|sse'
+```
+
+ถ้ามีแค่ `sse` และ `sse2` ให้ใช้ requirements.txt ของโปรเจคนี้ได้เลย (ไม่มี TensorFlow)
 
 ---
 
@@ -167,23 +195,33 @@ docker compose up -d --build
 
 | รายการ | ค่า |
 |--------|-----|
-| Host | localhost |
-| Port | 5433 (Docker) หรือ 5432 (ถ้าไม่มี local PostgreSQL) |
-| Database | attendance_db (ตามค่าใน .env) |
+| Host | 10.72.0.167 |
+| Port | 5433 |
+| Database | attendance_db |
 | Username | ตามค่าใน .env |
 | Password | ตามค่าใน .env |
 
 เปลี่ยน role ของ user:
 ```sql
+-- ดู users ทั้งหมด
+SELECT id, email, full_name, role FROM users;
+
 -- เปลี่ยนเป็น teacher
 UPDATE users SET role = 'teacher' WHERE email = 'email@example.com';
 
 -- เปลี่ยนเป็น admin
 UPDATE users SET role = 'admin' WHERE email = 'email@example.com';
-
--- ดู users ทั้งหมด
-SELECT id, email, full_name, role FROM users;
 ```
+
+---
+
+## Roles และสิทธิ์การใช้งาน
+
+| Role | สิทธิ์ |
+|------|--------|
+| `student` | Dashboard, ลงทะเบียนใบหน้า, เข้าร่วมวิชา, ดูประวัติการเข้าเรียน |
+| `teacher` | สร้างวิชา, เริ่ม session, ดู attendance report |
+| `admin` | จัดการ user, ดู report ทั้งหมด |
 
 ---
 
@@ -195,8 +233,6 @@ docker compose logs -f
 
 # ดู log เฉพาะ service
 docker compose logs -f backend
-docker compose logs -f frontend
-docker compose logs -f nginx
 
 # Restart service เดียว
 docker compose restart backend
@@ -217,24 +253,19 @@ docker compose ps
 
 ---
 
-## Roles และสิทธิ์การใช้งาน
+## ถ้าได้ Domain จริงในอนาคต
 
-| Role | สิทธิ์ |
-|------|--------|
-| `student` | Dashboard, ลงทะเบียนใบหน้า, เข้าร่วมวิชา, ดูประวัติการเข้าเรียน |
-| `teacher` | สร้างวิชา, เริ่ม session, ดู attendance report |
-| `admin` | จัดการ user, ดู report ทั้งหมด |
+เปลี่ยนจาก Self-signed เป็น Let's Encrypt:
 
----
-
-## การแก้ปัญหาที่พบบ่อย
-
-**502 Bad Gateway หลัง build ใหม่**
 ```bash
-docker compose down
-docker compose up -d --build
+# ติดตั้ง certbot
+apt install certbot python3-certbot-nginx
+
+# ขอ certificate
+certbot --nginx -d your-domain.kmitl.ac.th
 ```
 
+<<<<<<< HEAD
 **Face Register ใช้ไม่ได้ (Loading AI...)**
 - ตรวจสอบว่ามีไฟล์ model ใน `frontend/public/models/`
 - ต้องมีทั้ง `*-weights_manifest.json` และ `*-shard1`
@@ -242,3 +273,10 @@ docker compose up -d --build
 **Backend ต่อ DB ไม่ได้**
 - ตรวจสอบค่าใน `.env` ว่า `DATABASE_URL` ถูกต้อง
 - รัน `docker compose down` แล้ว `docker compose up -d --build` ใหม่
+=======
+แล้วแก้ `nginx/nginx.conf` เปลี่ยน path ของ certificate เป็น:
+```
+ssl_certificate /etc/letsencrypt/live/your-domain/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/your-domain/privkey.pem;
+```
+>>>>>>> 272bae3 (Update README.md)
