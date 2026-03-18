@@ -242,5 +242,3 @@ docker compose up -d --build
 **Backend ต่อ DB ไม่ได้**
 - ตรวจสอบค่าใน `.env` ว่า `DATABASE_URL` ถูกต้อง
 - รัน `docker compose down` แล้ว `docker compose up -d --build` ใหม่
-# Smart3
-# Smart3
