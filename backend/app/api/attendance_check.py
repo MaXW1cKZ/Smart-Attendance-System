@@ -17,7 +17,7 @@ from datetime import datetime
 
 router = APIRouter()
 
-COSINE_THRESHOLD = 0.35  # Minimum similarity to accept a match
+COSINE_THRESHOLD = 0.35
 
 
 class CheckInRequest(BaseModel):

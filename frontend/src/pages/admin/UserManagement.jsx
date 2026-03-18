@@ -96,7 +96,6 @@ export default function UserManagement() {
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        {/* Header */}
         <div className="bg-gradient-to-r from-slate-800 to-slate-700 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10">
             <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
@@ -112,7 +111,6 @@ export default function UserManagement() {
 
         <div className="px-10 -mt-20 pb-10 relative z-20">
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 min-h-[600px] flex flex-col">
-            {/* Toolbar */}
             <div className="flex justify-between items-center mb-6 gap-4 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="relative">
@@ -156,7 +154,6 @@ export default function UserManagement() {
               </div>
             </div>
 
-            {/* Table */}
             {loading ? (
               <div className="flex-1 flex items-center justify-center text-gray-400 font-medium">
                 Loading...
@@ -311,7 +308,6 @@ export default function UserManagement() {
         </div>
       </main>
 
-      {/* Change Role Modal */}
       {editUser && (
         <Modal onClose={() => setEditUser(null)}>
           <h3 className="text-xl font-bold text-gray-800 mb-1">Change Role</h3>
@@ -365,7 +361,6 @@ export default function UserManagement() {
         </Modal>
       )}
 
-      {/* Delete Modal */}
       {deleteUser && (
         <Modal onClose={() => setDeleteUser(null)}>
           <div className="text-center mb-6">

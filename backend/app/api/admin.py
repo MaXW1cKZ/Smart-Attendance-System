@@ -47,7 +47,6 @@ async def _log(
         print(f"[admin_log] {e}")
 
 
-# Dashboard Stats
 @router.get("/stats")
 async def get_stats(
     db: AsyncSession = Depends(get_db),
@@ -82,8 +81,6 @@ async def get_stats(
         .order_by(ClassSession.actual_start_time.desc())
     )
     active_sessions = active_result.scalars().all()
-
-    # Recent admin actions (last 5)
     log_result = await db.execute(
         select(AdminLog).order_by(desc(AdminLog.timestamp)).limit(5)
     )
@@ -121,7 +118,6 @@ async def get_stats(
     }
 
 
-# User Management
 @router.get("/users")
 async def list_users(
     role: Optional[str] = None,
@@ -214,7 +210,6 @@ async def delete_user(
     return {"message": f"User {email} deleted"}
 
 
-# Course Management
 @router.get("/courses")
 async def list_all_courses(
     search: Optional[str] = None,
@@ -388,7 +383,6 @@ async def admin_remove_enrollment(
     return {"message": "Enrollment removed"}
 
 
-# Admin Action Log
 @router.get("/logs")
 async def get_admin_logs(
     skip: int = 0,

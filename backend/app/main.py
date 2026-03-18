@@ -13,10 +13,10 @@ from app.models import logs
 
 app = FastAPI(title="Smart Attendance API", version="1.0.0")
 
-# --- Settings CORS ---
+# Settings CORS
 origins = [
     "http://localhost:5173",  # React
-    "http://127.0.0.1:5173",  # Reac    t IP
+    "http://127.0.0.1:5173",  # React IP
 ]
 
 app.add_middleware(
@@ -26,7 +26,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# --------------------
 
 # Router
 app.include_router(users.router, tags=["Users"])
@@ -39,7 +38,6 @@ app.include_router(admin.router, tags=["Admin"])
 
 @app.on_event("startup")
 async def startup():
-    # Create all table into Database
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

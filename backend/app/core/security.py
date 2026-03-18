@@ -19,14 +19,11 @@ SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey123")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
-# Password Hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Token from Header (Bearer Token)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
-# Function
 def verify_password(plain_password, hashed_password):
     if not hashed_password:
         return False

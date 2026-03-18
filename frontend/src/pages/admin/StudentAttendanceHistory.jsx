@@ -39,13 +39,13 @@ export default function StudentAttendanceHistory() {
   const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
 
-  // Attendance records (all sessions of that course for that student)
+  // Attendance records
   const [sessions, setSessions] = useState([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
   const [page, setPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState("all");
 
-  // Search students (uses admin/users endpoint with search)
+  // Search students
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
@@ -67,17 +67,14 @@ export default function StudentAttendanceHistory() {
     setSearchQuery(student.full_name || student.email);
     setSelectedCourse(null);
     setSessions([]);
-    // Load enrolled courses
     try {
       const res = await api.get(`/admin/users/${student.id}/courses`);
       setCourses(res.data || []);
     } catch {
-      // Fallback: get via enrollments from course list
       setCourses([]);
     }
   };
 
-  // Load sessions + my attendance when course selected
   useEffect(() => {
     if (!selectedCourse || !selectedStudent) return;
     setLoadingRecords(true);
@@ -180,7 +177,6 @@ export default function StudentAttendanceHistory() {
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        {/* Header */}
         <div className="bg-gradient-to-r from-slate-800 to-slate-900 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10">
             <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
@@ -196,9 +192,7 @@ export default function StudentAttendanceHistory() {
 
         <div className="px-10 -mt-20 pb-10 relative z-20">
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 min-h-[600px] flex flex-col gap-6">
-            {/* Step 1 + 2: Search + Course selector */}
             <div className="flex flex-col md:flex-row gap-4 border-b border-gray-100 pb-6">
-              {/* Student search */}
               <div className="flex-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
                   <FiUser className="inline mr-1" size={11} /> Search Student
@@ -227,7 +221,6 @@ export default function StudentAttendanceHistory() {
                     Search
                   </button>
 
-                  {/* Dropdown results */}
                   {searchResults.length > 0 && (
                     <div className="absolute top-full left-0 right-16 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 z-30 overflow-hidden">
                       {searchResults.map((s) => (
@@ -260,7 +253,6 @@ export default function StudentAttendanceHistory() {
                 </div>
               </div>
 
-              {/* Course selector */}
               <div className="flex-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
                   Course
@@ -292,7 +284,6 @@ export default function StudentAttendanceHistory() {
               </div>
             </div>
 
-            {/* Summary row */}
             {selectedStudent &&
               selectedCourse &&
               !loadingRecords &&
@@ -324,7 +315,6 @@ export default function StudentAttendanceHistory() {
                     </span>
                   </div>
                   <div className="flex gap-2">
-                    {/* Filter */}
                     <select
                       value={filterStatus}
                       onChange={(e) => {
@@ -348,7 +338,6 @@ export default function StudentAttendanceHistory() {
                 </div>
               )}
 
-            {/* Table */}
             {loadingRecords ? (
               <div className="flex-1 flex items-center justify-center text-gray-400 font-medium">
                 Loading…
@@ -451,7 +440,6 @@ export default function StudentAttendanceHistory() {
                   </table>
                 </div>
 
-                {/* Pagination */}
                 {totalPages > 1 && (
                   <div className="flex justify-between items-center pt-4 border-t border-gray-100">
                     <span className="text-sm text-gray-400">

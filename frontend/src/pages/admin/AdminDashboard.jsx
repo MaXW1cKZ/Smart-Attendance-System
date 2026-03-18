@@ -74,7 +74,6 @@ export default function AdminDashboard() {
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        {/* Header */}
         <div className="bg-gradient-to-r from-slate-800 to-slate-700 h-64 relative px-10 pt-10">
           <div className="flex justify-between items-start">
             <div>
@@ -104,7 +103,6 @@ export default function AdminDashboard() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
         </div>
 
-        {/* Stat Cards */}
         <div className="px-10 -mt-24 relative z-10 grid grid-cols-2 md:grid-cols-4 gap-5 mb-8">
           <StatCard
             icon={<FiUsers />}
@@ -140,7 +138,6 @@ export default function AdminDashboard() {
           />
         </div>
         <div className="px-10 pb-10 grid grid-cols-1 xl:grid-cols-3 gap-6">
-          {/* Recent Admin Actions */}
           <div className="xl:col-span-3 bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">

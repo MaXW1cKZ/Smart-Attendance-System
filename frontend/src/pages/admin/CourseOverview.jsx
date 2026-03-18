@@ -104,7 +104,6 @@ export default function CourseOverview() {
 
         <div className="px-10 -mt-20 pb-10 relative z-20">
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 min-h-[600px] flex flex-col">
-            {/* Toolbar */}
             <div className="flex justify-between items-center mb-6 gap-4">
               <div className="relative">
                 <FiSearch
@@ -131,7 +130,6 @@ export default function CourseOverview() {
               </div>
             </div>
 
-            {/* Table */}
             {loading ? (
               <div className="flex-1 flex items-center justify-center text-gray-400 font-medium">
                 Loading…
@@ -278,8 +276,6 @@ export default function CourseOverview() {
           </div>
         </div>
       </main>
-
-      {/* Enroll Modal */}
       {enrollModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
@@ -352,7 +348,6 @@ export default function CourseOverview() {
         </div>
       )}
 
-      {/* Delete Course Modal */}
       {deleteCourse && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center">
