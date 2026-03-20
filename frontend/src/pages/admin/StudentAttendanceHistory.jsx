@@ -13,6 +13,8 @@ import {
   FiXCircle,
   FiUser,
   FiRefreshCw,
+  FiEdit,
+  FiX,
 } from "react-icons/fi";
 
 const PAGE_SIZE = 10;
@@ -29,36 +31,62 @@ const STATUS_ICON = {
 };
 
 export default function StudentAttendanceHistory() {
-  // Search student
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
 
-  // Pick course
   const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
 
-  // Attendance records
   const [sessions, setSessions] = useState([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
   const [page, setPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [sortOrder, setSortOrder] = useState("asc");
 
-  // Search students
-  const handleSearch = async () => {
+  const [editingId, setEditingId] = useState(null);
+
+  useEffect(() => {
+    if (!searchQuery.trim() || selectedStudent) {
+      setSearchResults([]);
+      return;
+    }
+    const delayDebounce = setTimeout(() => {
+      setSearching(true);
+      api
+        .get(
+          `/admin/users?role=student&search=${encodeURIComponent(
+            searchQuery.trim(),
+          )}&limit=10`,
+        )
+        .then((res) => {
+          const foundUsers = Array.isArray(res.data)
+            ? res.data
+            : res.data.users || [];
+          setSearchResults(foundUsers);
+        })
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearching(false));
+    }, 500);
+
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery, selectedStudent]);
+
+  const handleSearchClick = () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
-    try {
-      const res = await api.get(
+    api
+      .get(
         `/admin/users?role=student&search=${encodeURIComponent(searchQuery.trim())}&limit=10`,
-      );
-      setSearchResults(res.data.users || []);
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
+      )
+      .then((res) => {
+        const foundUsers = Array.isArray(res.data)
+          ? res.data
+          : res.data.users || [];
+        setSearchResults(foundUsers);
+      })
+      .finally(() => setSearching(false));
   };
 
   const handleSelectStudent = async (student) => {
@@ -75,6 +103,36 @@ export default function StudentAttendanceHistory() {
     }
   };
 
+  const handleStatusChange = async (session, newStatus) => {
+    try {
+      let updatedAttendanceId = session.attendance_id;
+
+      if (session.attendance_id) {
+        await api.put(`/admin/attendance/${session.attendance_id}`, {
+          status: newStatus,
+        });
+      } else {
+        const res = await api.post(`/admin/attendance`, {
+          session_id: session.id,
+          student_id: selectedStudent.id,
+          status: newStatus,
+        });
+        updatedAttendanceId = res.data.attendance_id;
+      }
+
+      setSessions((prevSessions) =>
+        prevSessions.map((s) =>
+          s.id === session.id
+            ? { ...s, status: newStatus, attendance_id: updatedAttendanceId }
+            : s,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to update status", error);
+      alert("Failed to update attendance status.");
+    }
+  };
+
   useEffect(() => {
     if (!selectedCourse || !selectedStudent) return;
     setLoadingRecords(true);
@@ -88,12 +146,13 @@ export default function StudentAttendanceHistory() {
         const rows = await Promise.all(
           ended.map(async (s) => {
             try {
-              const att = await api.get(`/sessions/${s.id}/attendance`);
+              const att = await api.get(`/admin/sessions/${s.id}/attendance`);
               const rec = att.data.records?.find(
-                (r) => r.student_id === selectedStudent.id,
+                (r) => String(r.student_id) === String(selectedStudent.id),
               );
               return {
                 id: s.id,
+                attendance_id: rec?.id || null,
                 week_number: s.week_number,
                 date: s.date,
                 topic: s.topic,
@@ -105,20 +164,32 @@ export default function StudentAttendanceHistory() {
                 course: att.data.course,
               };
             } catch {
-              return { ...s, status: "absent", score: null, timestamp: null };
+              return {
+                ...s,
+                attendance_id: null,
+                status: "absent",
+                score: null,
+                timestamp: null,
+              };
             }
           }),
         );
-        setSessions(rows.reverse());
+        setSessions(rows);
       })
       .catch(console.error)
       .finally(() => setLoadingRecords(false));
   }, [selectedCourse, selectedStudent]);
 
+  const sortedSessions = [...sessions].sort((a, b) => {
+    return sortOrder === "asc"
+      ? a.week_number - b.week_number
+      : b.week_number - a.week_number;
+  });
+
   const filtered =
     filterStatus === "all"
-      ? sessions
-      : sessions.filter((s) => s.status === filterStatus);
+      ? sortedSessions
+      : sortedSessions.filter((s) => s.status === filterStatus);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -199,17 +270,17 @@ export default function StudentAttendanceHistory() {
                 </label>
                 <div className="flex gap-2 relative">
                   <input
-                    placeholder="Name or email…"
+                    placeholder="Search student by name or ID..."
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
-                      setSearchResults([]);
+                      if (selectedStudent) setSelectedStudent(null);
                     }}
-                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearchClick()}
                     className="flex-1 px-4 py-3 bg-gray-50 rounded-xl border-2 border-transparent focus:border-slate-400 outline-none text-sm font-medium"
                   />
                   <button
-                    onClick={handleSearch}
+                    onClick={handleSearchClick}
                     disabled={searching}
                     className="px-5 py-3 bg-slate-700 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
                   >
@@ -245,7 +316,7 @@ export default function StudentAttendanceHistory() {
                   {searchResults.length === 0 &&
                     searchQuery &&
                     !searching &&
-                    selectedStudent?.email !== searchQuery && (
+                    !selectedStudent && (
                       <div className="absolute top-full left-0 right-16 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 z-30 px-4 py-3 text-sm text-gray-400">
                         No students found
                       </div>
@@ -308,26 +379,22 @@ export default function StudentAttendanceHistory() {
                         Absent: {absent}
                       </span>
                     </div>
-                    <span
-                      className={`text-sm font-black px-3 py-1 rounded-lg ${attPct >= 80 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-600"}`}
-                    >
-                      {attPct}% {attPct >= 80 ? "✓ Passing" : "✗ At Risk"}
-                    </span>
                   </div>
                   <div className="flex gap-2">
-                    <select
-                      value={filterStatus}
-                      onChange={(e) => {
-                        setFilterStatus(e.target.value);
-                        setPage(1);
-                      }}
-                      className="text-xs font-bold bg-gray-50 px-3 py-2 rounded-xl border text-gray-600 focus:outline-none cursor-pointer"
+                    <button
+                      onClick={() =>
+                        setSortOrder((prev) =>
+                          prev === "asc" ? "desc" : "asc",
+                        )
+                      }
+                      className="flex items-center gap-1.5 px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition"
                     >
-                      <option value="all">All</option>
-                      <option value="present">Present</option>
-                      <option value="late">Late</option>
-                      <option value="absent">Absent</option>
-                    </select>
+                      <FiRefreshCw
+                        size={13}
+                        className={sortOrder === "desc" ? "rotate-180" : ""}
+                      />
+                      {sortOrder === "asc" ? "Oldest First" : "Newest First"}
+                    </button>
                     <button
                       onClick={handleExport}
                       className="flex items-center gap-1.5 px-4 py-2 bg-slate-700 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition"
@@ -372,6 +439,7 @@ export default function StudentAttendanceHistory() {
                         <th className="pb-3 text-center">Check-in</th>
                         <th className="pb-3 text-center">Score</th>
                         <th className="pb-3 text-center">Status</th>
+                        <th className="pb-3 text-center">Edit</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -426,13 +494,66 @@ export default function StudentAttendanceHistory() {
                               : "—"}
                           </td>
                           <td className="text-center">
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${STATUS_STYLE[s.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}
-                            >
-                              {STATUS_ICON[s.status]}
-                              {s.status?.charAt(0).toUpperCase() +
-                                s.status?.slice(1)}
-                            </span>
+                            {editingId === s.id ? (
+                              <div className="flex gap-1 justify-center">
+                                {["present", "late", "absent"].map((st) => (
+                                  <button
+                                    key={st}
+                                    onClick={() => {
+                                      handleStatusChange(s, st);
+                                      setEditingId(null); // อัปเดตเสร็จแล้วปิดโหมดแก้ไข
+                                    }}
+                                    className={`px-2 py-1 rounded-lg text-xs font-bold border transition-all capitalize ${
+                                      st === "present"
+                                        ? "bg-emerald-100 text-emerald-600 border-emerald-200"
+                                        : st === "late"
+                                          ? "bg-orange-100 text-orange-600 border-orange-200"
+                                          : "bg-rose-100 text-rose-600 border-rose-200"
+                                    }`}
+                                  >
+                                    {st === "present"
+                                      ? "Present"
+                                      : st === "late"
+                                        ? "Late"
+                                        : "Absent"}
+                                  </button>
+                                ))}
+                                <button
+                                  onClick={() => setEditingId(null)}
+                                  className="px-2 py-1 rounded-lg text-xs font-bold border border-gray-200 text-gray-400 hover:bg-gray-50 transition"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                                  STATUS_STYLE[s.status || "absent"] ||
+                                  "bg-gray-100 text-gray-500 border-gray-200"
+                                }`}
+                              >
+                                {STATUS_ICON[s.status || "absent"]}
+                                {(s.status || "absent")
+                                  .charAt(0)
+                                  .toUpperCase() +
+                                  (s.status || "absent").slice(1)}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* คอลัมน์ปุ่ม Edit (อยู่ตรงกลาง) */}
+                          <td className="text-center w-16">
+                            <div className="flex items-center justify-center">
+                              {editingId !== s.id && (
+                                <button
+                                  onClick={() => setEditingId(s.id)}
+                                  className="w-8 h-8 flex items-center justify-center rounded-xl border border-transparent text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                                  title="Edit Status"
+                                >
+                                  <FiEdit size={14} />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -460,7 +581,11 @@ export default function StudentAttendanceHistory() {
                         <button
                           key={p}
                           onClick={() => setPage(p)}
-                          className={`w-9 h-9 flex items-center justify-center rounded-lg text-sm font-bold transition ${p === page ? "bg-slate-700 text-white" : "border text-gray-500 hover:bg-gray-50"}`}
+                          className={`w-9 h-9 flex items-center justify-center rounded-lg text-sm font-bold transition ${
+                            p === page
+                              ? "bg-slate-700 text-white"
+                              : "border text-gray-500 hover:bg-gray-50"
+                          }`}
                         >
                           {p}
                         </button>

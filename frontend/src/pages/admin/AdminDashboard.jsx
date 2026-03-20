@@ -103,16 +103,24 @@ export default function AdminDashboard() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
         </div>
 
-        <div className="px-10 -mt-24 relative z-10 grid grid-cols-2 md:grid-cols-4 gap-5 mb-8">
+        <div className="px-10 -mt-24 relative z-10 grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
           <StatCard
+            onClick={() => navigate("/admin/users")}
             icon={<FiUsers />}
             label="Total Users"
             value={stats?.total_users ?? "—"}
-            sub={`${stats?.total_teachers ?? 0} teachers · ${stats?.total_students ?? 0} students`}
+            sub={`${
+              stats
+                ? (stats.total_users || 0) -
+                  (stats.total_teachers || 0) -
+                  (stats.total_students || 0)
+                : 0
+            } admins · ${stats?.total_teachers ?? 0} teachers · ${stats?.total_students ?? 0} students`}
             gradient="from-blue-500 to-indigo-500"
             shadow="shadow-blue-200"
           />
           <StatCard
+            onClick={() => navigate("/admin/courses")}
             icon={<FiBook />}
             label="Courses"
             value={stats?.total_courses ?? "—"}
@@ -121,20 +129,13 @@ export default function AdminDashboard() {
             shadow="shadow-violet-200"
           />
           <StatCard
-            icon={<FiActivity />}
-            label="Sessions"
+            onClick={() => navigate("/admin/attendance-history")}
+            icon={<FiCheckCircle />}
+            label="Class Sessions"
             value={stats?.total_sessions ?? "—"}
-            sub="total conducted"
+            sub="total classes conducted"
             gradient="from-emerald-500 to-teal-400"
             shadow="shadow-emerald-200"
-          />
-          <StatCard
-            icon={<FiTrendingUp />}
-            label="Attendance Rate"
-            value={stats ? `${stats.system_attendance_rate}%` : "—"}
-            sub="system-wide"
-            gradient="from-amber-400 to-orange-400"
-            shadow="shadow-orange-200"
           />
         </div>
         <div className="px-10 pb-10 grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -205,10 +206,11 @@ export default function AdminDashboard() {
   );
 }
 
-function StatCard({ icon, label, value, sub, gradient, shadow }) {
+function StatCard({ icon, label, value, sub, gradient, shadow, onClick }) {
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl p-6 text-white shadow-xl ${shadow} bg-gradient-to-br ${gradient} transition-transform hover:scale-[1.02]`}
+      onClick={onClick}
+      className={`cursor-pointer relative overflow-hidden rounded-2xl p-6 text-white shadow-xl ${shadow} bg-gradient-to-br ${gradient} transition-transform hover:scale-[1.02]`}
     >
       <div className="flex items-center gap-2 mb-3 opacity-90">
         <div className="p-2 bg-white/20 rounded-lg">{icon}</div>

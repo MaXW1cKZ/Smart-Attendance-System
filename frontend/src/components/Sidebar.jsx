@@ -7,6 +7,7 @@ import {
   FiMonitor,
   FiLogOut,
   FiCamera,
+  FiCalendar,
   FiPieChart,
   FiSettings,
   FiShield,
@@ -43,8 +44,9 @@ const Sidebar = () => {
       return [
         { icon: <FiServer />, label: "Dashboard", path: "/admin/dashboard" },
         { icon: <FiUsers />, label: "User Management", path: "/admin/users" },
+        { icon: <FiPlusSquare />, label: "Create Course", path: "/admin/create-course" },
         { icon: <FiBook />, label: "Course Overview", path: "/admin/courses" },
-        { icon: <FiFileText />, label: "Student History", path: "/admin/student-attendance-history",},
+        { icon: <FiCalendar />, label: "Attendance History", path: "/admin/attendance-history" },
         { icon: <FiList />, label: "Activity Log", path: "/admin/logs" },
       ];
     }

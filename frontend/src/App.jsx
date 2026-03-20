@@ -27,6 +27,8 @@ import EnrolledStudents from "./pages/teacher/EnrolledStudents";
 // Admin
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import UserManagement from "./pages/admin/UserManagement";
+import AdminCreateCourse from "./pages/admin/AdminCreateCourse";
+import StudentAttendanceHistory from "./pages/admin/StudentAttendanceHistory";
 import CourseOverview from "./pages/admin/CourseOverview";
 import ActivityLog from "./pages/admin/Activitylog";
 
@@ -163,6 +165,15 @@ function App() {
           }
         />
         <Route
+          path="/admin/create-course"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <AdminCreateCourse />{" "}
+              {/* ใช้ AdminCreateCourse ตามไฟล์ที่คุณมี */}
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin/courses"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
@@ -171,18 +182,18 @@ function App() {
           }
         />
         <Route
-          path="/admin/logs"
+          path="/admin/attendance-history"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
-              <ActivityLog />
+              <StudentAttendanceHistory />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/admin/create-course"
+          path="/admin/logs"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
-              <CreateCourse />
+              <ActivityLog />
             </ProtectedRoute>
           }
         />

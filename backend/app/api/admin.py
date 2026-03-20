@@ -12,6 +12,8 @@ from app.models.users import User
 from app.models.course import Course, Enrollment
 from app.models.attendance import ClassSession, Attendance, AttendanceStatus
 from app.models.logs import AdminLog
+from app.schemas.courses import CourseCreate
+from app.schemas.attendance import CreateAttendanceRequest, UpdateAttendanceRequest
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -277,6 +279,35 @@ async def list_all_courses(
     return {"courses": courses, "total": total}
 
 
+@router.post("/courses")
+async def create_course(
+    course_data: CourseCreate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    if course_data.teacher_id:
+        teacher = await db.get(User, course_data.teacher_id)
+        if not teacher or teacher.role != "teacher":
+            raise HTTPException(status_code=400, detail="Invalid teacher assigned")
+
+    new_course = Course(**course_data.dict())
+
+    db.add(new_course)
+    await db.commit()
+    await db.refresh(new_course)
+
+    await _log(
+        db,
+        admin,
+        "create_course",
+        "course",
+        new_course.id,
+        f"Created course: {new_course.course_code}: {new_course.name}",
+    )
+
+    return {"message": "Course created successfully", "course_id": new_course.id}
+
+
 @router.delete("/courses/{course_id}")
 async def admin_delete_course(
     course_id: int,
@@ -438,3 +469,110 @@ async def get_student_courses(
         }
         for c in courses
     ]
+
+
+@router.put("/attendance/{attendance_id}")
+async def update_attendance(
+    attendance_id: int,
+    req: UpdateAttendanceRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    result = await db.execute(select(Attendance).where(Attendance.id == attendance_id))
+    record = result.scalars().first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    old_status = (
+        record.status.value if hasattr(record.status, "value") else str(record.status)
+    )
+    record.status = req.status
+    await db.commit()
+    await _log(
+        db,
+        admin,
+        "update_attendance",
+        "attendance",
+        record.id,
+        f"Changed status from {old_status} to {req.status}",
+    )
+
+    return {"message": "Attendance updated successfully"}
+
+
+@router.get("/sessions/{session_id}/attendance")
+async def get_session_attendance_admin(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    result = await db.execute(select(ClassSession).where(ClassSession.id == session_id))
+    session = result.scalars().first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    result = await db.execute(select(Course).where(Course.id == session.course_id))
+    course = result.scalars().first()
+
+    result = await db.execute(
+        select(Attendance).where(Attendance.session_id == session_id)
+    )
+    records = result.scalars().all()
+
+    # 👇 แปลง Course Object เป็น Dict ป้องกันปัญหา FastAPI Serialize (Error 500)
+    course_data = (
+        {"id": course.id, "course_code": course.course_code, "name": course.name}
+        if course
+        else None
+    )
+
+    return {
+        "course": course_data,
+        "records": [
+            {
+                "id": r.id,
+                "student_id": r.student_id,
+                "status": r.status.value
+                if hasattr(r.status, "value")
+                else str(r.status).split(".")[-1]
+                if r.status
+                else "absent",
+                "score": getattr(r, "score", None),
+                "timestamp": r.timestamp,
+            }
+            for r in records
+        ],
+    }
+
+
+@router.post("/attendance")
+async def create_attendance(
+    req: CreateAttendanceRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    # เช็คว่ามีข้อมูลอยู่แล้วหรือยัง
+    result = await db.execute(
+        select(Attendance).where(
+            Attendance.session_id == req.session_id,
+            Attendance.student_id == req.student_id,
+        )
+    )
+    record = result.scalars().first()
+
+    if record:
+        record.status = AttendanceStatus(req.status)
+    else:
+        # สร้างใหม่
+        record = Attendance(
+            session_id=req.session_id,
+            student_id=req.student_id,
+            status=AttendanceStatus(req.status),
+            timestamp=datetime.now(),
+            confidence_score=100,
+        )
+        db.add(record)
+
+    await db.commit()
+    await db.refresh(record)
+
+    return {"message": "Attendance created", "attendance_id": record.id}
