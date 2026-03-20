@@ -2,10 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import engine, Base
 
-from app.api import users, auth, courses, face_register, attendance_check
+# Import Routers
+from app.api import users, auth, courses, face_register, attendance_check, admin
+
+# Import Models
 from app.models.users import User
 from app.models.face import FaceEmbedding
 from app.models.attendance import ClassSession, Attendance
+from app.models import logs
 
 from sqlalchemy import text
 
@@ -31,6 +35,7 @@ app.include_router(auth.router, tags=["Authentication"])
 app.include_router(courses.router, tags=["Courses"])
 app.include_router(face_register.router, tags=["student"])
 app.include_router(attendance_check.router, tags=["Attendance"])
+app.include_router(admin.router, tags=["Admin"])
 
 
 @app.on_event("startup")

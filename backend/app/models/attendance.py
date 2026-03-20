@@ -1,4 +1,3 @@
-# app/models/attendance.py
 import enum
 from sqlalchemy import (
     Column,
@@ -33,14 +32,10 @@ class ClassSession(Base):
     end_time = Column(Time)
     is_active = Column(Boolean, default=False)
     session_code = Column(String, nullable=True)
-
-    # ✅ เวลาจริง (บันทึกตอน Start/End)
     actual_start_time = Column(DateTime, nullable=True)
     actual_end_time = Column(DateTime, nullable=True)
-
-    # ✅ ข้อมูลเพิ่มเติม
-    topic = Column(String, nullable=True)  # หัวข้อที่สอนวันนี้
-    room = Column(String, nullable=True)  # ห้องเรียน
+    topic = Column(String, nullable=True)
+    room = Column(String, nullable=True)
 
     course = relationship("Course", back_populates="sessions")
     attendances = relationship(

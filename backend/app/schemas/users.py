@@ -18,4 +18,4 @@ class UserResponse(UserBase):
         from_attributes = True
         
 class GoogleLoginRequest(BaseModel):
-    token: str  # รับ Credential (Token) ที่ได้จาก Google
+    token: str
