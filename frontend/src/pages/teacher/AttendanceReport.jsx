@@ -44,7 +44,6 @@ export default function AttendanceReport() {
   const [page, setPage] = useState(1);
   const [editingId, setEditingId] = useState(null);
 
-  // Load courses on mount
   useEffect(() => {
     api
       .get("/courses/my-courses")
@@ -52,7 +51,6 @@ export default function AttendanceReport() {
       .catch(console.error);
   }, []);
 
-  // Load sessions when course changes
   useEffect(() => {
     if (!selectedCourse) return;
     setSessions([]);
@@ -61,12 +59,10 @@ export default function AttendanceReport() {
     api
       .get(`/courses/${selectedCourse.id}/sessions`)
       .then((r) => {
-        // Only show sessions that have started
         const started = r.data.filter(
           (s) => s.actual_start_time || s.is_active,
         );
         setSessions(started);
-        // Auto-select latest
         if (started.length > 0) {
           const latest = started.reduce((a, b) =>
             a.week_number > b.week_number ? a : b,
@@ -77,7 +73,6 @@ export default function AttendanceReport() {
       .catch(console.error);
   }, [selectedCourse]);
 
-  // Load report when session changes
   useEffect(() => {
     if (!selectedSession) return;
     setLoading(true);
@@ -173,7 +168,6 @@ export default function AttendanceReport() {
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        {/* Header */}
         <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10">
             <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
@@ -189,9 +183,7 @@ export default function AttendanceReport() {
 
         <div className="px-10 -mt-20 pb-10 relative z-20">
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 min-h-[600px] flex flex-col gap-6">
-            {/* ── Selectors ── */}
             <div className="flex flex-col xl:flex-row gap-4 border-b border-gray-100 pb-6">
-              {/* Course selector */}
               <div className="flex flex-col gap-1 flex-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                   Course
@@ -218,7 +210,6 @@ export default function AttendanceReport() {
                 </div>
               </div>
 
-              {/* Session selector */}
               <div className="flex flex-col gap-1 flex-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                   Session
@@ -257,7 +248,6 @@ export default function AttendanceReport() {
               </div>
             </div>
 
-            {/* ── Summary Cards (shown when data loaded) ── */}
             {summary && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <SummaryCard
@@ -287,11 +277,9 @@ export default function AttendanceReport() {
               </div>
             )}
 
-            {/* ── Filter & Search bar ── */}
             {reportData && (
               <div className="flex flex-wrap gap-3 items-center justify-between">
                 <div className="flex gap-3 flex-wrap">
-                  {/* Search */}
                   <div className="relative">
                     <FiSearch
                       className="absolute left-3 top-2.5 text-gray-400"
@@ -308,7 +296,6 @@ export default function AttendanceReport() {
                       className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-200 w-52"
                     />
                   </div>
-                  {/* Status filter */}
                   <div className="relative">
                     <select
                       className="appearance-none pl-3 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none cursor-pointer"
@@ -328,7 +315,6 @@ export default function AttendanceReport() {
                       size={14}
                     />
                   </div>
-                  {/* Sort */}
                   <div className="relative">
                     <select
                       className="appearance-none pl-3 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none cursor-pointer"
@@ -354,7 +340,6 @@ export default function AttendanceReport() {
               </div>
             )}
 
-            {/* ── Table ── */}
             {loading ? (
               <div className="flex-1 flex items-center justify-center text-gray-400">
                 <FiRefreshCw className="animate-spin mr-2" /> Loading...
@@ -487,7 +472,6 @@ export default function AttendanceReport() {
                   )}
                 </div>
 
-                {/* Pagination */}
                 <div className="flex justify-between items-center pt-4 border-t border-gray-100">
                   <span className="text-sm text-gray-400">
                     Showing{" "}

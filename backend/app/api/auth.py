@@ -13,53 +13,79 @@ from app.schemas.users import GoogleLoginRequest, UserCreate, UserResponse
 
 router = APIRouter()
 
-# ⚠️ เอา Client ID ของคุณมาใส่ตรงนี้ (หรือดึงจาก .env ก็ได้)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+
+_TEACHER_DOMAINS = set(
+    d.strip()
+    for d in os.getenv("TEACHER_DOMAINS", "it.kmitl.ac.th,kmitl.ac.th").split(",")
+    if d.strip()
+)
+_ADMIN_EMAILS = set(
+    e.strip().lower()
+    for e in os.getenv("ADMIN_EMAILS", "admin@kmitl.ac.th").split(",")
+    if e.strip()
+)
+
+
+def detect_role(email: str) -> str:
+    """
+    Priority order:
+      1. admin   — email in ADMIN_EMAILS list
+      2. teacher — non-numeric local + domain in TEACHER_DOMAINS
+      3. student — numeric local (student ID number)
+      4. student — default fallback
+    """
+    email = email.lower().strip()
+
+    if email in _ADMIN_EMAILS:
+        return "admin"
+
+    parts = email.split("@")
+    if len(parts) != 2:
+        return "student"
+
+    local, domain = parts[0], parts[1]
+
+    if domain in _TEACHER_DOMAINS and not local.isdigit():
+        return "teacher"
+
+    return "student"
 
 
 @router.post("/google-login")
 async def google_login(request: GoogleLoginRequest, db: AsyncSession = Depends(get_db)):
-    token = request.token
-
     try:
-        # 1. ตรวจสอบ Token กับ Google
         id_info = id_token.verify_oauth2_token(
-            token, google_requests.Request(), GOOGLE_CLIENT_ID
+            request.token, google_requests.Request(), GOOGLE_CLIENT_ID
         )
-
         email = id_info.get("email")
         name = id_info.get("name")
         google_id = id_info.get("sub")
 
         if not email:
             raise HTTPException(status_code=400, detail="Invalid Google Token")
-
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid Google Token")
 
-    # 2. เช็คว่ามี User นี้ในระบบหรือยัง
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalars().first()
 
-    # 3. ถ้ายังไม่มี -> สมัครสมาชิกให้อัตโนมัติ
     if not user:
+        # ✅ Auto-detect role on first sign-up
         user = User(
             email=email,
             full_name=name,
-            role="student",  # ค่าเริ่มต้น
+            role=detect_role(email),
             google_id=google_id,
-            hashed_password=None,  # ไม่มีรหัสผ่าน
+            hashed_password=None,
         )
         db.add(user)
         await db.commit()
         await db.refresh(user)
 
-    # 4. สร้าง Access Token (JWT) ของระบบเรา
     access_token = create_access_token(
         data={"sub": user.email, "role": user.role, "id": user.id}
     )
-
-    # ✅ เพิ่มข้อมูลเพิ่มเติมใน response
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -69,15 +95,15 @@ async def google_login(request: GoogleLoginRequest, db: AsyncSession = Depends(g
     }
 
 
+# ── Password login ────────────────────────────────────────────────────────────
 @router.post("/token")
 async def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
 ):
-    # 1. ค้นหา User จาก Email (form_data.username จะเก็บ email)
     result = await db.execute(select(User).where(User.email == form_data.username))
     user = result.scalars().first()
 
-    # 2. ถ้าไม่เจอ User หรือ Password ไม่ถูก
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -85,12 +111,9 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 3. สร้าง Token
     access_token = create_access_token(
         data={"sub": user.email, "role": user.role, "id": user.id}
     )
-
-    # ✅ 4. ส่ง Token และข้อมูลเพิ่มเติมกลับไป
     return {
         "access_token": access_token,
         "token_type": "bearer",

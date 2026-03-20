@@ -39,8 +39,8 @@ export default function Stu_Attendance() {
   const [sessions, setSessions] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
-  const [sessionDetail, setSessionDetail] = useState(null); // full /sessions/{id}/attendance response
-  const [courseReport, setCourseReport] = useState(null); // full /courses/{id}/report response
+  const [sessionDetail, setSessionDetail] = useState(null);
+  const [courseReport, setCourseReport] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const [search, setSearch] = useState("");
@@ -48,7 +48,6 @@ export default function Stu_Attendance() {
   const [sortBy, setSortBy] = useState("week");
   const [page, setPage] = useState(1);
 
-  // Load enrolled courses on mount
   useEffect(() => {
     api
       .get("/student/my-courses")
@@ -66,7 +65,6 @@ export default function Stu_Attendance() {
       .catch(console.error);
   }, []);
 
-  // Load sessions + course report when course changes
   useEffect(() => {
     if (!selectedCourse) return;
     setSessions([]);
@@ -95,7 +93,6 @@ export default function Stu_Attendance() {
       .catch(console.error);
   }, [selectedCourse]);
 
-  // Load session detail when session changes
   useEffect(() => {
     if (!selectedSession) return;
     setLoading(true);
@@ -108,22 +105,17 @@ export default function Stu_Attendance() {
       .finally(() => setLoading(false));
   }, [selectedSession]);
 
-  // MY record in the selected session
   const myRecord = sessionDetail?.records?.find(
     (r) => r.student_id === studentId,
   );
 
-  // My overall stats from course report
   const myStats = courseReport?.students?.find(
     (s) => s.student_id === studentId,
   );
   const course = courseReport?.course;
 
-  // Build a flat list of all sessions with MY attendance for filtering/search
-  // (We'll do a single-session view — same as teacher, per session)
   const filteredRecords = useMemo(() => {
     if (!sessionDetail) return [];
-    // Student sees ONLY their own record
     let rows = myRecord ? [myRecord] : [];
 
     if (search)
@@ -138,13 +130,7 @@ export default function Stu_Attendance() {
     return rows;
   }, [sessionDetail, myRecord, search, filterStatus]);
 
-  // For "all sessions" view in table — build from sessions list
-  // Show all sessions of the course with MY status (fetched once via course report-style)
-  // We reuse sessionDetail only for the selected session
-  // The main table shows per-session summary (all the student's sessions for this course)
   const allSessionRows = useMemo(() => {
-    // We build this from sessions + per-session attendance fetched lazily
-    // For simplicity: show only ended sessions
     return sessions.filter((s) => s.actual_end_time || s.is_active);
   }, [sessions]);
 
@@ -166,10 +152,6 @@ export default function Stu_Attendance() {
       "",
       "Week,Date,Topic,Room,Status,Check-in,Score",
     ].join("\n");
-
-    // We need per-session data — use the sessions list + fetch on the fly is complex
-    // Instead export what we have: the allSessionRows (just metadata + we know status from course report won't give per-session)
-    // Simplest: export the course report summary for this student
     const rows = [
       `,,,,Present,, ${myStats.present}`,
       `,,,,Late,, ${myStats.late}`,
@@ -196,7 +178,6 @@ export default function Stu_Attendance() {
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        {/* ── Header — identical to teacher AttendanceReport ── */}
         <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10">
             <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
@@ -212,9 +193,7 @@ export default function Stu_Attendance() {
 
         <div className="px-10 -mt-20 pb-10 relative z-20">
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 min-h-[600px] flex flex-col gap-6">
-            {/* ── Selectors — same layout as teacher ── */}
             <div className="flex flex-col xl:flex-row gap-4 border-b border-gray-100 pb-6">
-              {/* Course selector */}
               <div className="flex flex-col gap-1 flex-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                   Course
@@ -241,7 +220,6 @@ export default function Stu_Attendance() {
                 </div>
               </div>
 
-              {/* Session selector */}
               <div className="flex flex-col gap-1 flex-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                   Session
@@ -265,11 +243,7 @@ export default function Stu_Attendance() {
                         {s.date
                           ? ` · ${new Date(s.date + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
                           : ""}
-                        {s.is_active
-                          ? " 🔴 Live"
-                          : s.actual_end_time
-                            ? " ✅"
-                            : ""}
+                        {s.is_active ? " 🔴 Live" : s.actual_end_time ? "" : ""}
                         {s.topic ? ` · ${s.topic}` : ""}
                       </option>
                     ))}
@@ -279,7 +253,6 @@ export default function Stu_Attendance() {
               </div>
             </div>
 
-            {/* ── Summary Cards — my overall stats (mirrors teacher's 4 gradient cards) ── */}
             {myStats && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <SummaryCard
@@ -314,10 +287,8 @@ export default function Stu_Attendance() {
               </div>
             )}
 
-            {/* ── Toolbar (search / filter / export) — only when session loaded ── */}
             {sessionDetail && (
               <div className="flex flex-wrap justify-between items-center gap-3">
-                {/* Session meta tags */}
                 <div className="flex flex-wrap gap-2">
                   <span className="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-lg">
                     Week {sessionDetail.session.week_number}
@@ -348,7 +319,6 @@ export default function Stu_Attendance() {
                   )}
                 </div>
 
-                {/* Right side: filter + export */}
                 <div className="flex gap-2 items-center">
                   <div className="relative">
                     <FiSearch
@@ -394,7 +364,6 @@ export default function Stu_Attendance() {
               </div>
             )}
 
-            {/* ── My attendance for this session ── */}
             {loading ? (
               <div className="flex-1 flex items-center justify-center text-gray-400">
                 <FiRefreshCw className="animate-spin mr-2" /> Loading...
@@ -408,14 +377,12 @@ export default function Stu_Attendance() {
               </div>
             ) : (
               <>
-                {/* My record card — prominent, above the class summary */}
                 <MySessionCard
                   record={myRecord}
                   course={sessionDetail.course}
                   session={sessionDetail.session}
                 />
 
-                {/* Class summary (read-only context) */}
                 <div>
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                     Class Summary — Week {sessionDetail.session.week_number}
@@ -462,7 +429,6 @@ export default function Stu_Attendance() {
                   </div>
                 </div>
 
-                {/* ── Full history table (all sessions in this course) ── */}
                 <AllSessionsTable
                   sessions={sessions}
                   studentId={studentId}
@@ -481,7 +447,6 @@ export default function Stu_Attendance() {
   );
 }
 
-// ── My session result card ────────────────────────────────────────────────────
 function MySessionCard({ record, course, session }) {
   const STATUS_MAP = {
     present: {
@@ -578,7 +543,6 @@ function MySessionCard({ record, course, session }) {
   );
 }
 
-// ── All sessions history table (lazy per-row status) ─────────────────────────
 function AllSessionsTable({
   sessions,
   studentId,
@@ -588,11 +552,10 @@ function AllSessionsTable({
   totalPages,
   paginated,
 }) {
-  const [rowData, setRowData] = useState({}); // {session_id: {status, score, timestamp}}
+  const [rowData, setRowData] = useState({});
   const [fetchedIds, setFetchedIds] = useState(new Set());
 
   useEffect(() => {
-    // Fetch ended sessions only
     paginated.forEach(async (s) => {
       if (!s.actual_end_time) return;
       if (fetchedIds.has(s.id)) return;
@@ -718,7 +681,6 @@ function AllSessionsTable({
         </table>
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-between items-center pt-4 border-t border-gray-100 mt-4">
           <span className="text-sm text-gray-400">
@@ -762,7 +724,6 @@ function AllSessionsTable({
   );
 }
 
-// ── Summary card (gradient) — identical to teacher ────────────────────────────
 function SummaryCard({ label, value, color, icon, sub }) {
   const colors = {
     blue: "from-blue-500 to-blue-400 shadow-blue-200",

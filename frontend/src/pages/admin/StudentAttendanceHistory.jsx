@@ -1,188 +1,610 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import api from "../../api/axios";
 import Sidebar from "../../components/Sidebar";
 import {
   FiFileText,
   FiSearch,
-  FiFilter,
   FiDownload,
   FiChevronLeft,
   FiChevronRight,
   FiCalendar,
-  FiClock,
   FiCheckCircle,
   FiAlertCircle,
   FiXCircle,
-  FiUser
+  FiUser,
+  FiRefreshCw,
+  FiEdit,
+  FiX,
 } from "react-icons/fi";
 
-const StudentAttendanceHistory = () => {
-  // Mock Data: จำลองข้อมูลประวัติการเข้าเรียนของนักเรียนคนหนึ่ง
-  const [records] = useState([
-    { id: 1, course: "Smart Attendance AI", date: "12/12/2568", time: "09.00-12.00", point: 1, maxPoint: 5, status: "Present" },
-    { id: 2, course: "Software Engineering", date: "11/12/2568", time: "13.00-16.00", point: 1, maxPoint: 5, status: "Present" },
-    { id: 3, course: "Smart Attendance AI", date: "05/12/2568", time: "09.00-12.00", point: 0.5, maxPoint: 5, status: "Late" },
-    { id: 4, course: "Database Systems", date: "04/12/2568", time: "09.00-12.00", point: 0, maxPoint: 5, status: "Absent" },
-    { id: 5, course: "Smart Attendance AI", date: "28/11/2568", time: "09.00-12.00", point: 1, maxPoint: 5, status: "Present" },
-    { id: 6, course: "Web Technology", date: "27/11/2568", time: "13.00-16.00", point: 1, maxPoint: 5, status: "Present" },
-    { id: 7, course: "Smart Attendance AI", date: "21/11/2568", time: "09.00-12.00", point: 0.5, maxPoint: 5, status: "Late" },
-    { id: 8, course: "Software Engineering", date: "20/11/2568", time: "13.00-16.00", point: 1, maxPoint: 5, status: "Present" },
-  ]);
+const PAGE_SIZE = 10;
 
-  // Helper เลือกสี Badge
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case "Present": return "text-emerald-600 bg-emerald-50 border-emerald-200";
-      case "Late": return "text-orange-600 bg-orange-50 border-orange-200";
-      case "Absent": return "text-rose-600 bg-rose-50 border-rose-200";
-      default: return "text-gray-600 bg-gray-50 border-gray-200";
+const STATUS_STYLE = {
+  present: "text-emerald-600 bg-emerald-50 border-emerald-200",
+  late: "text-orange-600 bg-orange-50 border-orange-200",
+  absent: "text-rose-600 bg-rose-50 border-rose-200",
+};
+const STATUS_ICON = {
+  present: <FiCheckCircle size={13} />,
+  late: <FiAlertCircle size={13} />,
+  absent: <FiXCircle size={13} />,
+};
+
+export default function StudentAttendanceHistory() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+
+  const [courses, setCourses] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState(null);
+
+  const [sessions, setSessions] = useState([]);
+  const [loadingRecords, setLoadingRecords] = useState(false);
+  const [page, setPage] = useState(1);
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [sortOrder, setSortOrder] = useState("asc");
+
+  const [editingId, setEditingId] = useState(null);
+
+  useEffect(() => {
+    if (!searchQuery.trim() || selectedStudent) {
+      setSearchResults([]);
+      return;
     }
+    const delayDebounce = setTimeout(() => {
+      setSearching(true);
+      api
+        .get(
+          `/admin/users?role=student&search=${encodeURIComponent(
+            searchQuery.trim(),
+          )}&limit=10`,
+        )
+        .then((res) => {
+          const foundUsers = Array.isArray(res.data)
+            ? res.data
+            : res.data.users || [];
+          setSearchResults(foundUsers);
+        })
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearching(false));
+    }, 500);
+
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery, selectedStudent]);
+
+  const handleSearchClick = () => {
+    if (!searchQuery.trim()) return;
+    setSearching(true);
+    api
+      .get(
+        `/admin/users?role=student&search=${encodeURIComponent(searchQuery.trim())}&limit=10`,
+      )
+      .then((res) => {
+        const foundUsers = Array.isArray(res.data)
+          ? res.data
+          : res.data.users || [];
+        setSearchResults(foundUsers);
+      })
+      .finally(() => setSearching(false));
+  };
+
+  const handleSelectStudent = async (student) => {
+    setSelectedStudent(student);
+    setSearchResults([]);
+    setSearchQuery(student.full_name || student.email);
+    setSelectedCourse(null);
+    setSessions([]);
+    try {
+      const res = await api.get(`/admin/users/${student.id}/courses`);
+      setCourses(res.data || []);
+    } catch {
+      setCourses([]);
+    }
+  };
+
+  const handleStatusChange = async (session, newStatus) => {
+    try {
+      let updatedAttendanceId = session.attendance_id;
+
+      if (session.attendance_id) {
+        await api.put(`/admin/attendance/${session.attendance_id}`, {
+          status: newStatus,
+        });
+      } else {
+        const res = await api.post(`/admin/attendance`, {
+          session_id: session.id,
+          student_id: selectedStudent.id,
+          status: newStatus,
+        });
+        updatedAttendanceId = res.data.attendance_id;
+      }
+
+      setSessions((prevSessions) =>
+        prevSessions.map((s) =>
+          s.id === session.id
+            ? { ...s, status: newStatus, attendance_id: updatedAttendanceId }
+            : s,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to update status", error);
+      alert("Failed to update attendance status.");
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedCourse || !selectedStudent) return;
+    setLoadingRecords(true);
+    setSessions([]);
+    setPage(1);
+
+    api
+      .get(`/courses/${selectedCourse.id}/sessions`)
+      .then(async (r) => {
+        const ended = r.data.filter((s) => s.actual_end_time || s.is_active);
+        const rows = await Promise.all(
+          ended.map(async (s) => {
+            try {
+              const att = await api.get(`/admin/sessions/${s.id}/attendance`);
+              const rec = att.data.records?.find(
+                (r) => String(r.student_id) === String(selectedStudent.id),
+              );
+              return {
+                id: s.id,
+                attendance_id: rec?.id || null,
+                week_number: s.week_number,
+                date: s.date,
+                topic: s.topic,
+                room: s.room,
+                is_active: s.is_active,
+                status: rec?.status || "absent",
+                score: rec?.score ?? null,
+                timestamp: rec?.timestamp || null,
+                course: att.data.course,
+              };
+            } catch {
+              return {
+                ...s,
+                attendance_id: null,
+                status: "absent",
+                score: null,
+                timestamp: null,
+              };
+            }
+          }),
+        );
+        setSessions(rows);
+      })
+      .catch(console.error)
+      .finally(() => setLoadingRecords(false));
+  }, [selectedCourse, selectedStudent]);
+
+  const sortedSessions = [...sessions].sort((a, b) => {
+    return sortOrder === "asc"
+      ? a.week_number - b.week_number
+      : b.week_number - a.week_number;
+  });
+
+  const filtered =
+    filterStatus === "all"
+      ? sortedSessions
+      : sortedSessions.filter((s) => s.status === filterStatus);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const present = sessions.filter((s) => s.status === "present").length;
+  const late = sessions.filter((s) => s.status === "late").length;
+  const absent = sessions.filter((s) => s.status === "absent").length;
+  const attPct =
+    sessions.length > 0
+      ? Math.round(((present + late) / sessions.length) * 100)
+      : 0;
+
+  const handleExport = () => {
+    if (!sessions.length || !selectedStudent || !selectedCourse) return;
+    const BOM = "\uFEFF";
+    const header = [
+      `Student: ${selectedStudent.full_name} (${selectedStudent.email})`,
+      `Course: ${selectedCourse.course_code} - ${selectedCourse.name}`,
+      `Attendance: ${attPct}%`,
+      "",
+      "Week,Date,Topic,Room,Check-in,Status,Score",
+    ].join("\n");
+    const rows = sessions
+      .map((s) =>
+        [
+          s.week_number,
+          s.date
+            ? new Date(s.date + "T12:00").toLocaleDateString("en-US")
+            : "—",
+          s.topic || "—",
+          s.room || "—",
+          s.timestamp
+            ? new Date(s.timestamp).toLocaleTimeString("en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              })
+            : "—",
+          s.status,
+          s.score ?? "—",
+        ].join(","),
+      )
+      .join("\n");
+    const blob = new Blob([BOM + header + "\n" + rows], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `history_${selectedStudent.email}_${selectedCourse.course_code}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
-
       <main className="flex-1 overflow-y-auto">
-        {/* --- Header Theme Admin (Slate Gradient) --- */}
         <div className="bg-gradient-to-r from-slate-800 to-slate-900 h-64 relative px-10 pt-10 pb-24">
-          <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                <FiFileText className="bg-white/10 p-1.5 rounded-lg backdrop-blur-sm" size={36} />
-                Student Attendance History
-              </h1>
-              <p className="text-slate-300 opacity-90 pl-1">
-                Viewing attendance logs for a specific student.
-              </p>
-            </div>
-
-            {/* Dropdown เลือกนักเรียน (จำลองว่า Admin เลือกดูคนนี้อยู่) */}
-            <div className="flex flex-col items-end">
-                <label className="text-slate-300 text-xs font-semibold mb-1 mr-1 flex items-center gap-1">
-                    <FiUser /> Viewing Student:
-                </label>
-                <select className="bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:bg-white/20 cursor-pointer hover:bg-white/20 transition w-64 option:text-gray-800 font-semibold">
-                    <option className="text-gray-800" value="1">Supachai Maneerat (65070282)</option>
-                    <option className="text-gray-800" value="2">Kelly Pond (65070283)</option>
-                </select>
-            </div>
+          <div className="relative z-10">
+            <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+              <FiFileText className="bg-white/10 p-1.5 rounded-lg" size={36} />
+              Student Attendance History
+            </h1>
+            <p className="text-slate-300 opacity-90">
+              Search a student → pick a course → view full attendance
+            </p>
           </div>
-          
-          {/* Decorative Circles */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none"></div>
-          <div className="absolute bottom-0 left-20 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
         </div>
 
-        {/* --- Floating Content Container --- */}
         <div className="px-10 -mt-20 pb-10 relative z-20">
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 min-h-[600px] flex flex-col">
-            
-            {/* Toolbar Section */}
-            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                {/* หัวข้อสรุป (ตามรูปต้นฉบับ) */}
-                <div>
-                    <h2 className="text-xl font-bold text-gray-800 mb-2">
-                        ประวัติการเข้าเรียนรวมทุกวิชา
-                    </h2>
-                    <p className="text-blue-600 font-medium text-sm flex items-center gap-2 bg-blue-50 w-max px-3 py-1 rounded-full border border-blue-100">
-                        <FiCheckCircle /> เข้าเรียนแล้ว 85% (ขาด 2 ครั้ง)
-                    </p>
-                </div>
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 min-h-[600px] flex flex-col gap-6">
+            <div className="flex flex-col md:flex-row gap-4 border-b border-gray-100 pb-6">
+              <div className="flex-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  <FiUser className="inline mr-1" size={11} /> Search Student
+                </label>
+                <div className="flex gap-2 relative">
+                  <input
+                    placeholder="Search student by name or ID..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      if (selectedStudent) setSelectedStudent(null);
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearchClick()}
+                    className="flex-1 px-4 py-3 bg-gray-50 rounded-xl border-2 border-transparent focus:border-slate-400 outline-none text-sm font-medium"
+                  />
+                  <button
+                    onClick={handleSearchClick}
+                    disabled={searching}
+                    className="px-5 py-3 bg-slate-700 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {searching ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <FiSearch size={15} />
+                    )}
+                    Search
+                  </button>
 
-                {/* Tools: Search, Filter, Export */}
-                <div className="flex gap-3 w-full md:w-auto">
-                    <div className="relative group flex-1 md:flex-none">
-                        <FiSearch className="absolute left-3 top-3 text-gray-400 group-focus-within:text-blue-600" />
-                        <input 
-                            type="text" 
-                            placeholder="Search course or date..." 
-                            className="w-full md:w-56 pl-10 pr-4 py-2.5 bg-gray-50 border-transparent rounded-xl focus:bg-white focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 transition-all text-sm font-medium"
-                        />
-                    </div>
-                    <div className="relative">
-                         <select className="appearance-none bg-gray-50 hover:bg-gray-100 text-gray-600 pl-4 pr-10 py-2.5 rounded-xl border border-transparent focus:outline-none focus:border-blue-600 text-sm font-medium cursor-pointer transition-colors">
-                            <option>Newest First</option>
-                            <option>Oldest First</option>
-                            <option>Status: Absent</option>
-                        </select>
-                        <FiFilter className="absolute right-3 top-3 text-gray-400 pointer-events-none" size={14}/>
-                    </div>
-                    <button className="p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition border border-transparent hover:border-blue-100 bg-gray-50" title="Export CSV">
-                        <FiDownload size={20}/>
-                    </button>
-                </div>
-            </div>
-
-            {/* Table Section (โครงสร้างคอลัมน์ตามรูปต้นฉบับ) */}
-            <div className="overflow-x-auto flex-1">
-              <table className="w-full min-w-[800px]">
-                <thead>
-                  <tr className="text-left text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                    <th className="pb-4 pl-4 w-16">No.</th>
-                    <th className="pb-4">Course Name</th>
-                    <th className="pb-4">Date</th>
-                    <th className="pb-4">Time</th>
-                    {/* ผมตัด Email ออกเพราะเราดูของคนๆ เดียวอยู่แล้ว ใส่ Status แทนจะดูง่ายกว่าครับ */}
-                    <th className="pb-4 text-center">Status / Point</th>
-                    <th className="pb-4 text-center">Max Point</th>
-                  </tr>
-                </thead>
-                <tbody className="text-sm">
-                  {records.map((item, index) => (
-                    <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/80 transition h-16 group">
-                      <td className="pl-4 text-gray-400 font-medium">{index + 1}</td>
-                      
-                      {/* Course Name */}
-                      <td className="font-bold text-gray-700">{item.course}</td>
-                      
-                      {/* Date */}
-                      <td className="text-gray-600 font-medium">
-                        <div className="flex items-center gap-2">
-                             <FiCalendar className="text-gray-400" size={14}/> {item.date}
+                  {searchResults.length > 0 && (
+                    <div className="absolute top-full left-0 right-16 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 z-30 overflow-hidden">
+                      {searchResults.map((s) => (
+                        <div
+                          key={s.id}
+                          onClick={() => handleSelectStudent(s)}
+                          className="flex items-center gap-3 px-4 py-3 hover:bg-blue-50 cursor-pointer transition border-b border-gray-50 last:border-0"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-sm font-bold shrink-0">
+                            {(s.full_name || s.email).charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-800 text-sm">
+                              {s.full_name || "—"}
+                            </p>
+                            <p className="text-xs text-gray-400">{s.email}</p>
+                          </div>
                         </div>
-                      </td>
-                      
-                      {/* Time */}
-                      <td className="text-gray-500 font-medium text-xs flex items-center gap-2 mt-4">
-                         <FiClock size={12}/> {item.time}
-                      </td>
-                      
-                      {/* Status / Point Badge */}
-                      <td className="text-center">
-                        <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg border ${getStatusBadge(item.status)}`}>
-                            {item.status === "Present" && <FiCheckCircle size={14} />}
-                            {item.status === "Late" && <FiAlertCircle size={14} />}
-                            {item.status === "Absent" && <FiXCircle size={14} />}
-                            <span className="font-bold">{item.point}</span>
-                            <span className="text-xs opacity-75">({item.status})</span>
-                        </div>
-                      </td>
+                      ))}
+                    </div>
+                  )}
+                  {searchResults.length === 0 &&
+                    searchQuery &&
+                    !searching &&
+                    !selectedStudent && (
+                      <div className="absolute top-full left-0 right-16 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 z-30 px-4 py-3 text-sm text-gray-400">
+                        No students found
+                      </div>
+                    )}
+                </div>
+              </div>
 
-                      {/* Max Point */}
-                      <td className="text-center font-bold text-gray-400">
-                        {item.maxPoint}
-                      </td>
-                    </tr>
+              <div className="flex-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  Course
+                </label>
+                <select
+                  disabled={!selectedStudent || courses.length === 0}
+                  value={selectedCourse?.id || ""}
+                  onChange={(e) => {
+                    const c = courses.find(
+                      (x) => x.id === parseInt(e.target.value),
+                    );
+                    setSelectedCourse(c || null);
+                  }}
+                  className="w-full appearance-none bg-gray-50 text-gray-700 font-bold px-4 py-3 rounded-xl border-2 border-transparent focus:border-slate-400 outline-none cursor-pointer disabled:opacity-40 text-sm"
+                >
+                  <option value="">
+                    {!selectedStudent
+                      ? "— Select student first —"
+                      : courses.length === 0
+                        ? "— No enrolled courses —"
+                        : "— Select Course —"}
+                  </option>
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.course_code}: {c.name}
+                    </option>
                   ))}
-                </tbody>
-              </table>
+                </select>
+              </div>
             </div>
 
-            {/* Pagination (ตามสไตล์ Admin) */}
-            <div className="flex justify-end items-center mt-8 gap-2 border-t border-gray-50 pt-6">
-                 <span className="text-sm text-gray-400 mr-4">Page 1 of 3</span>
-                 <button className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-lg text-gray-400 hover:bg-gray-200 text-sm transition"><FiChevronLeft/></button>
-                 <button className="w-8 h-8 flex items-center justify-center bg-blue-600 rounded-lg text-white text-sm font-bold shadow-sm transition">1</button>
-                 <button className="w-8 h-8 flex items-center justify-center hover:bg-gray-50 rounded-lg text-gray-500 text-sm transition">2</button>
-                 <button className="w-8 h-8 flex items-center justify-center hover:bg-gray-50 rounded-lg text-gray-500 text-sm transition">3</button>
-                 <button className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-lg text-gray-400 hover:bg-gray-200 text-sm transition"><FiChevronRight/></button>
-            </div>
+            {selectedStudent &&
+              selectedCourse &&
+              !loadingRecords &&
+              sessions.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      <span className="font-bold text-gray-700">
+                        Present: {present}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <div className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                      <span className="font-bold text-gray-700">
+                        Late: {late}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                      <span className="font-bold text-gray-700">
+                        Absent: {absent}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() =>
+                        setSortOrder((prev) =>
+                          prev === "asc" ? "desc" : "asc",
+                        )
+                      }
+                      className="flex items-center gap-1.5 px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition"
+                    >
+                      <FiRefreshCw
+                        size={13}
+                        className={sortOrder === "desc" ? "rotate-180" : ""}
+                      />
+                      {sortOrder === "asc" ? "Oldest First" : "Newest First"}
+                    </button>
+                    <button
+                      onClick={handleExport}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-slate-700 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition"
+                    >
+                      <FiDownload size={13} /> Export CSV
+                    </button>
+                  </div>
+                </div>
+              )}
 
+            {loadingRecords ? (
+              <div className="flex-1 flex items-center justify-center text-gray-400 font-medium">
+                Loading…
+              </div>
+            ) : !selectedStudent ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-300 gap-2">
+                <FiSearch size={40} className="opacity-30" />
+                <p className="text-sm font-medium">
+                  Search for a student to get started
+                </p>
+              </div>
+            ) : !selectedCourse ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-300 gap-2">
+                <FiFileText size={40} className="opacity-30" />
+                <p className="text-sm font-medium">
+                  Select a course to view attendance
+                </p>
+              </div>
+            ) : paginated.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+                No records found
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto flex-1">
+                  <table className="w-full min-w-[700px] text-sm">
+                    <thead>
+                      <tr className="text-left text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                        <th className="pb-3 pl-4 w-12">Week</th>
+                        <th className="pb-3">Date</th>
+                        <th className="pb-3">Topic / Room</th>
+                        <th className="pb-3 text-center">Check-in</th>
+                        <th className="pb-3 text-center">Score</th>
+                        <th className="pb-3 text-center">Status</th>
+                        <th className="pb-3 text-center">Edit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginated.map((s) => (
+                        <tr
+                          key={s.id}
+                          className="border-b border-gray-50 hover:bg-gray-50 transition h-14"
+                        >
+                          <td className="pl-4 text-gray-400 font-bold text-xs">
+                            W{s.week_number}
+                          </td>
+                          <td className="font-bold text-gray-700">
+                            <div className="flex items-center gap-1.5">
+                              <FiCalendar size={11} className="text-gray-400" />
+                              {s.date
+                                ? new Date(
+                                    s.date + "T12:00",
+                                  ).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })
+                                : "—"}
+                            </div>
+                          </td>
+                          <td className="text-xs text-gray-500">
+                            {s.topic && (
+                              <p className="font-semibold text-gray-600">
+                                {s.topic}
+                              </p>
+                            )}
+                            {s.room && <p>Room {s.room}</p>}
+                            {!s.topic && !s.room && (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="text-center font-mono text-xs text-gray-500">
+                            {s.timestamp
+                              ? new Date(s.timestamp).toLocaleTimeString(
+                                  "en-US",
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    hour12: false,
+                                  },
+                                )
+                              : "—"}
+                          </td>
+                          <td className="text-center font-bold text-gray-700 text-sm">
+                            {s.score !== null && s.score !== undefined
+                              ? s.score
+                              : "—"}
+                          </td>
+                          <td className="text-center">
+                            {editingId === s.id ? (
+                              <div className="flex gap-1 justify-center">
+                                {["present", "late", "absent"].map((st) => (
+                                  <button
+                                    key={st}
+                                    onClick={() => {
+                                      handleStatusChange(s, st);
+                                      setEditingId(null); // อัปเดตเสร็จแล้วปิดโหมดแก้ไข
+                                    }}
+                                    className={`px-2 py-1 rounded-lg text-xs font-bold border transition-all capitalize ${
+                                      st === "present"
+                                        ? "bg-emerald-100 text-emerald-600 border-emerald-200"
+                                        : st === "late"
+                                          ? "bg-orange-100 text-orange-600 border-orange-200"
+                                          : "bg-rose-100 text-rose-600 border-rose-200"
+                                    }`}
+                                  >
+                                    {st === "present"
+                                      ? "Present"
+                                      : st === "late"
+                                        ? "Late"
+                                        : "Absent"}
+                                  </button>
+                                ))}
+                                <button
+                                  onClick={() => setEditingId(null)}
+                                  className="px-2 py-1 rounded-lg text-xs font-bold border border-gray-200 text-gray-400 hover:bg-gray-50 transition"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                                  STATUS_STYLE[s.status || "absent"] ||
+                                  "bg-gray-100 text-gray-500 border-gray-200"
+                                }`}
+                              >
+                                {STATUS_ICON[s.status || "absent"]}
+                                {(s.status || "absent")
+                                  .charAt(0)
+                                  .toUpperCase() +
+                                  (s.status || "absent").slice(1)}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* คอลัมน์ปุ่ม Edit (อยู่ตรงกลาง) */}
+                          <td className="text-center w-16">
+                            <div className="flex items-center justify-center">
+                              {editingId !== s.id && (
+                                <button
+                                  onClick={() => setEditingId(s.id)}
+                                  className="w-8 h-8 flex items-center justify-center rounded-xl border border-transparent text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                                  title="Edit Status"
+                                >
+                                  <FiEdit size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                    <span className="text-sm text-gray-400">
+                      Page {page} of {totalPages} · {filtered.length} sessions
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={page === 1}
+                        onClick={() => setPage((p) => p - 1)}
+                        className="w-9 h-9 flex items-center justify-center border rounded-lg hover:bg-gray-50 disabled:opacity-40"
+                      >
+                        <FiChevronLeft />
+                      </button>
+                      {Array.from(
+                        { length: Math.min(totalPages, 7) },
+                        (_, i) => i + 1,
+                      ).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setPage(p)}
+                          className={`w-9 h-9 flex items-center justify-center rounded-lg text-sm font-bold transition ${
+                            p === page
+                              ? "bg-slate-700 text-white"
+                              : "border text-gray-500 hover:bg-gray-50"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                      <button
+                        disabled={page === totalPages}
+                        onClick={() => setPage((p) => p + 1)}
+                        className="w-9 h-9 flex items-center justify-center border rounded-lg hover:bg-gray-50 disabled:opacity-40"
+                      >
+                        <FiChevronRight />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </main>
     </div>
   );
-};
-
-export default StudentAttendanceHistory;
+}

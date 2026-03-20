@@ -7,6 +7,7 @@ from app.models.users import User
 from app.models.face import FaceEmbedding
 from app.models.course import Course, Enrollment
 from app.models.attendance import Attendance, ClassSession, AttendanceStatus
+from app.schemas.attendance import CheckInRequest
 from pydantic import BaseModel
 from deepface import DeepFace
 import numpy as np
@@ -17,12 +18,8 @@ from datetime import datetime
 
 router = APIRouter()
 
-COSINE_THRESHOLD = 0.35  # Minimum similarity to accept a match
+COSINE_THRESHOLD = 0.35
 
-
-class CheckInRequest(BaseModel):
-    session_id: int
-    image: str
 
 
 def base64_to_image(base64_string: str):

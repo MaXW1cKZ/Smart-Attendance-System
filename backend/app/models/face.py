@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-from pgvector.sqlalchemy import Vector  # ✅ Import Vector มาตรงๆ
+from pgvector.sqlalchemy import Vector
 
 
 class FaceEmbedding(Base):

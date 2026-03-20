@@ -44,7 +44,6 @@ const StudentEnroll = () => {
     setError("");
     try {
       await api.post("/courses/enroll", { course_code: courseCode.trim() });
-      // ✅ Redirect immediately — no waiting animation
       navigate("/student/dashboard", {
         state: { message: `Successfully enrolled in ${courseInfo?.name}!` },
       });
@@ -60,7 +59,6 @@ const StudentEnroll = () => {
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        {/* Header */}
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 h-64 relative px-10 pt-10">
           <div className="relative z-10 text-white">
             <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
@@ -88,7 +86,6 @@ const StudentEnroll = () => {
                 </p>
               </div>
 
-              {/* ✅ Input — plain onChange, no toUpperCase() */}
               <div className="flex gap-3 mb-6">
                 <input
                   type="text"
@@ -116,7 +113,6 @@ const StudentEnroll = () => {
                 </button>
               </div>
 
-              {/* Error */}
               {error && (
                 <div className="flex items-center gap-2 text-rose-500 bg-rose-50 border border-rose-100 p-4 rounded-xl mb-6">
                   <FiAlertCircle />
@@ -124,7 +120,6 @@ const StudentEnroll = () => {
                 </div>
               )}
 
-              {/* Course preview */}
               {courseInfo && (
                 <div className="bg-gray-50 rounded-2xl p-6 border border-dashed border-indigo-200">
                   <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-3">
@@ -163,7 +158,6 @@ const StudentEnroll = () => {
                     </div>
                   </div>
 
-                  {/* ✅ Instant redirect, no bounce */}
                   <button
                     onClick={handleEnroll}
                     disabled={enrolling}

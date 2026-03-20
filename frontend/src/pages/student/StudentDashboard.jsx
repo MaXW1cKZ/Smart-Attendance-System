@@ -30,13 +30,11 @@ export default function StudentDashboard() {
   const [loadingReport, setLoadingReport] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Clock
   useEffect(() => {
     const t = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Load enrolled courses
   useEffect(() => {
     api
       .get("/student/my-courses")
@@ -46,7 +44,6 @@ export default function StudentDashboard() {
       .catch(console.error);
   }, []);
 
-  // Load sessions when course selected
   useEffect(() => {
     if (!selectedCourse) return;
     setSessions([]);
@@ -55,13 +52,11 @@ export default function StudentDashboard() {
     api
       .get(`/courses/${selectedCourse.id}/sessions`)
       .then((r) => {
-        // Only show sessions that have been started
         const started = r.data.filter(
           (s) => s.actual_start_time || s.is_active,
         );
         setSessions(started);
         if (started.length > 0) {
-          // Auto-select latest session
           const latest = started.reduce((a, b) =>
             a.week_number > b.week_number ? a : b,
           );
@@ -71,7 +66,6 @@ export default function StudentDashboard() {
       .catch(console.error);
   }, [selectedCourse]);
 
-  // Load attendance when session selected
   useEffect(() => {
     if (!selectedSession) return;
     if (!selectedSession.actual_start_time && !selectedSession.is_active) {
@@ -87,23 +81,16 @@ export default function StudentDashboard() {
       .finally(() => setLoadingReport(false));
   }, [selectedSession]);
 
-  // Find MY record in the session
   const myRecord = reportData?.records?.find((r) => r.student_id === studentId);
 
-  // Stats for stat cards
-  // Card 2: total sessions attended (across all sessions of selected course)
-  const totalAttended = sessions.filter(
-    (s) => s.actual_end_time, // only ended sessions
-  ).length;
+  const totalAttended = sessions.filter((s) => s.actual_end_time).length;
 
-  // Card 3: my status in selected session
   const sessionStatus = myRecord?.status ?? null;
 
   return (
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        {/* ── Header ── identical layout to TeacherDashboard */}
         <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10">
           <div className="flex justify-between items-start">
             <div>
@@ -137,7 +124,6 @@ export default function StudentDashboard() {
           )}
         </div>
 
-        {/* ── Stat Cards ── same -mt-24 z-10 grid as Teacher */}
         <div className="px-10 -mt-24 relative z-10 grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
           <StatCard
             icon={<FiBook />}
@@ -188,13 +174,11 @@ export default function StudentDashboard() {
         </div>
 
         <div className="px-10 pb-10 space-y-6">
-          {/* ── Course + Session Selector ── same structure as Teacher */}
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2">
               <FiBarChart2 className="text-blue-500" /> View My Attendance
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Course dropdown */}
               <div>
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
                   Course
@@ -221,7 +205,6 @@ export default function StudentDashboard() {
                 </div>
               </div>
 
-              {/* Session dropdown */}
               <div>
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
                   Session
@@ -245,11 +228,7 @@ export default function StudentDashboard() {
                         {s.date
                           ? ` · ${new Date(s.date + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
                           : ""}
-                        {s.is_active
-                          ? " 🔴 Live"
-                          : s.actual_end_time
-                            ? " ✅"
-                            : ""}
+                        {s.is_active ? " 🔴 Live" : s.actual_end_time ? "" : ""}
                         {s.topic ? ` · ${s.topic}` : ""}
                       </option>
                     ))}
@@ -260,14 +239,12 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* ── Content area ── */}
           {loadingReport ? (
             <div className="bg-white rounded-3xl p-10 text-center text-gray-400 font-medium">
               Loading attendance data...
             </div>
           ) : reportData ? (
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
-              {/* Session meta tags — same as Teacher */}
               {reportData.session && (
                 <div className="mb-5 flex flex-wrap gap-2">
                   <span className="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1 rounded-lg">
@@ -306,7 +283,6 @@ export default function StudentDashboard() {
                 </div>
               )}
 
-              {/* MY attendance card — replaces the class-wide summary */}
               <MyAttendanceCard
                 record={myRecord}
                 course={reportData.course}
@@ -315,7 +291,6 @@ export default function StudentDashboard() {
                 sessionStartTime={reportData.session?.actual_start_time}
               />
 
-              {/* Class summary (read-only, student perspective) */}
               <div className="mt-6">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                   Class Summary
@@ -362,7 +337,6 @@ export default function StudentDashboard() {
                 </div>
               </div>
 
-              {/* Full report link */}
               <div className="text-center mt-4">
                 <button
                   onClick={() =>
@@ -407,7 +381,6 @@ export default function StudentDashboard() {
   );
 }
 
-// ── My Attendance Card ────────────────────────────────────────────────────────
 function MyAttendanceCard({
   record,
   course,
@@ -452,7 +425,6 @@ function MyAttendanceCard({
 
   const style = STATUS_STYLES[record.status] || STATUS_STYLES.absent;
 
-  // Show time elapsed at check-in
   let elapsedMin = null;
   if (sessionStartTime && record.timestamp) {
     elapsedMin = Math.round(
@@ -510,7 +482,6 @@ function MyAttendanceCard({
   );
 }
 
-// ── Reusable components ───────────────────────────────────────────────────────
 function StatCard({ icon, label, value, sub, gradient, shadow }) {
   return (
     <div
