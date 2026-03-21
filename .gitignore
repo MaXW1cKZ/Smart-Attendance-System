@@ -28,9 +28,9 @@ __pycache__/
 htmlcov/
 
 # --- DeepFace & AI Models ---
+frontend/public/models/*
 *.h5
 *.hdf5
-*.json
 *.weights
 *.pth
 *.pt
