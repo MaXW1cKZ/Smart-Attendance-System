@@ -16,10 +16,7 @@ from sqlalchemy import text
 app = FastAPI(title="Smart Attendance API", version="1.0.0")
 
 origins = [
-    "http://10.72.0.167",       # Production server
-    "http://localhost:5173",    # Dev (Vite)
-    "http://127.0.0.1:5173",
-    "http://10.72.0.167.nip.io",
+    "https://smartcheck.it.kmitl.ac.th", #Domain ของ 10.72.0.167
 ]
 
 app.add_middleware(
