@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
+from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime, date, time
+
 
 from app.core.database import get_db
 from app.models.users import User
@@ -76,7 +78,6 @@ class StartSessionRequest(BaseModel):
     room: Optional[str] = None
 
 
-# 1. Create course
 @router.post("/courses/", response_model=CourseResponse)
 async def create_course(
     course_data: CourseCreate,
@@ -109,7 +110,6 @@ async def create_course(
     return new_course
 
 
-# 2. Get my courses (สำหรับอาจารย์)
 @router.get("/courses/my-courses", response_model=List[CourseResponse])
 async def get_my_courses(
     db: AsyncSession = Depends(get_db),
@@ -134,7 +134,6 @@ async def get_student_courses(
     return result.scalars().all()
 
 
-# 3. Update course
 @router.patch("/courses/{course_id}", response_model=CourseResponse)
 async def update_course(
     course_id: int,
@@ -175,7 +174,6 @@ async def update_course(
     return course
 
 
-# 4. Delete course
 @router.delete("/courses/{course_id}")
 async def delete_course(
     course_id: int,
@@ -194,7 +192,6 @@ async def delete_course(
     return {"message": f"Course '{course.name}' deleted"}
 
 
-# 5. Search course by code (for student enrollment)
 @router.get("/courses/search/{course_code}")
 async def search_course(course_code: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -216,7 +213,6 @@ async def search_course(course_code: str, db: AsyncSession = Depends(get_db)):
     }
 
 
-# 6. Enroll student
 @router.post("/courses/enroll")
 async def enroll_course(
     data: dict,
@@ -243,10 +239,6 @@ async def enroll_course(
     return {"message": "Enrolled successfully"}
 
 
-# Session Endpoints
-
-
-# Start new session (Plan B — teacher presses Start)
 @router.post("/sessions/start")
 async def start_new_session(
     req: StartSessionRequest,
@@ -307,13 +299,11 @@ async def start_new_session(
         "started_at": now,
         "course_name": course.name,
         "course_code": course.course_code,
-        # Pass thresholds to frontend so it can show countdown
         "late_after_minutes": course.late_after_minutes,
         "absent_after_minutes": course.absent_after_minutes,
     }
 
 
-# End session — set actual_end_time, mark absent for no-shows
 @router.post("/sessions/{session_id}/end")
 async def end_session(
     session_id: int,
@@ -337,7 +327,6 @@ async def end_session(
     session.is_active = False
     session.actual_end_time = now
 
-    # Mark absent for enrolled students who never checked in
     enrollments_result = await db.execute(
         select(Enrollment).where(Enrollment.course_id == session.course_id)
     )
@@ -383,12 +372,31 @@ async def get_all_courses(
     return result.scalars().all()
 
 
-# List sessions of a course
 @router.get("/courses/{course_id}/sessions")
 async def get_course_sessions(
     course_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    # ตรวจสอบว่า course มีอยู่จริง
+    course_result = await db.execute(select(Course).where(Course.id == course_id))
+    course = course_result.scalars().first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    # ต้องเป็น teacher เจ้าของ หรือ student ที่ enroll แล้วเท่านั้น
+    is_teacher = course.teacher_id == current_user.id
+    if not is_teacher:
+        enroll_check = await db.execute(
+            select(Enrollment).where(
+                Enrollment.course_id == course_id,
+                Enrollment.student_id == current_user.id,
+            )
+        )
+        is_student = enroll_check.scalars().first() is not None
+        if not is_student:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
     result = await db.execute(
         select(ClassSession)
         .where(ClassSession.course_id == course_id)
@@ -410,7 +418,6 @@ async def get_course_sessions(
     ]
 
 
-# 10. Get teacher's currently active session (for Sidebar badge)
 @router.get("/sessions/active")
 async def get_active_session(
     db: AsyncSession = Depends(get_db),
@@ -426,7 +433,6 @@ async def get_active_session(
     return session
 
 
-# 11. Get attendance records for a session (Report Table)
 @router.get("/sessions/{session_id}/attendance")
 async def get_session_attendance(
     session_id: int,
@@ -474,7 +480,7 @@ async def get_session_attendance(
                 else 0.0
             )
         else:
-            score = None  # Scoring disabled
+            score = None
 
         records.append(
             {
@@ -522,7 +528,6 @@ async def get_session_attendance(
     }
 
 
-# Manual status override
 @router.patch("/attendance/{attendance_id}")
 async def update_attendance_status(
     attendance_id: int,
@@ -539,7 +544,6 @@ async def update_attendance_status(
     if not att:
         raise HTTPException(status_code=404, detail="Attendance record not found")
 
-    # Admin can edit any record; teacher can only edit their own course
     is_admin = current_user.role == "admin"
     is_owner = att.session.course.teacher_id == current_user.id
     if not is_admin and not is_owner:
@@ -554,7 +558,6 @@ async def update_attendance_status(
     return {"message": "Updated", "status": new_status}
 
 
-# 13. Full course report (all students, all sessions)
 @router.get("/courses/{course_id}/report")
 async def get_course_report(
     course_id: int,
@@ -664,4 +667,111 @@ async def get_course_report(
         },
         "total_sessions": total_sessions,
         "students": students_report,
+    }
+
+
+@router.get("/student/face-status")
+async def get_face_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """คืน { registered: bool } บอกว่า student ลง face แล้วหรือยัง"""
+    from app.models.face import FaceEmbedding
+
+    result = await db.execute(
+        select(FaceEmbedding).where(FaceEmbedding.user_id == current_user.id)
+    )
+    registered = result.scalars().first() is not None
+    return {"registered": registered}
+
+
+# 2. List all courses (สำหรับ student — browse & enroll)
+@router.get("/courses/browse")
+async def browse_courses(
+    search: Optional[str] = None,
+    day: Optional[str] = None,
+    semester: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    นักศึกษาดูรายวิชาทั้งหมดในระบบ พร้อม filter/search
+    คืน enrolled: true ถ้า student ลงทะเบียนวิชานั้นแล้ว
+    """
+    q = (
+        select(Course, User.full_name)
+        .join(User, Course.teacher_id == User.id)
+        .order_by(Course.course_code)
+    )
+    if search:
+        term = f"%{search}%"
+        q = q.where(Course.name.ilike(term) | Course.course_code.ilike(term))
+    if day:
+        q = q.where(Course.day_of_week == day)
+    if semester:
+        q = q.where(Course.semester == semester)
+
+    total = (
+        await db.execute(select(func.count()).select_from(q.subquery()))
+    ).scalar() or 0
+
+    rows = (await db.execute(q.offset(skip).limit(limit))).fetchall()
+
+    # ดึง enrollment ของ current user ในรอบเดียว
+    my_enrollments = (
+        (
+            await db.execute(
+                select(Enrollment.course_id).where(
+                    Enrollment.student_id == current_user.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    enrolled_ids = set(my_enrollments)
+
+    return {
+        "total": total,
+        "courses": [
+            {
+                "id": c.id,
+                "course_code": c.course_code,
+                "section": c.section,
+                "name": c.name,
+                "semester": c.semester,
+                "academic_year": c.academic_year,
+                "day_of_week": c.day_of_week,
+                "start_time": str(c.start_time)[:5],
+                "end_time": str(c.end_time)[:5],
+                "teacher_name": teacher_name,
+                "enrolled": c.id in enrolled_ids,
+            }
+            for c, teacher_name in rows
+        ],
+    }
+
+
+# 3. Search course แบบ case-insensitive (แทน endpoint เดิม)
+# แก้ endpoint เดิม /courses/search/{course_code} ให้ใช้ ilike
+@router.get("/courses/search/{course_code}")
+async def search_course(course_code: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Course, User.full_name)
+        .join(User, Course.teacher_id == User.id)
+        .where(Course.course_code.ilike(course_code.strip()))  # ← ilike แทน ==
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Course not found")
+    course, teacher_name = row
+    return {
+        "id": course.id,
+        "course_code": course.course_code,
+        "name": course.name,
+        "section": course.section,
+        "day_of_week": course.day_of_week,
+        "teacher_name": teacher_name,
     }
