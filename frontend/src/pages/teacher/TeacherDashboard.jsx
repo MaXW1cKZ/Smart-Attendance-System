@@ -89,7 +89,7 @@ export default function TeacherDashboard() {
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10">
+        <div className="bg-gradient-to-r from-blue-700 to-slate-800 h-64 relative px-10 pt-10">
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-3xl font-bold text-white mb-1">
@@ -120,7 +120,7 @@ export default function TeacherDashboard() {
             label="Courses Teaching"
             value={courses.length}
             sub="courses this semester"
-            gradient="from-blue-500 to-indigo-500"
+            gradient="from-blue-600 to-blue-500"
             shadow="shadow-blue-200"
           />
           <StatCard
@@ -207,11 +207,7 @@ export default function TeacherDashboard() {
                               day: "numeric",
                             })}`
                           : ""}
-                        {s.is_active
-                          ? " 🔴 Live"
-                          : s.actual_end_time
-                            ? ""
-                            : ""}
+                        {s.is_active ? " 🔴 Live" : s.actual_end_time ? "" : ""}
                         {s.topic ? ` · ${s.topic}` : ""}
                       </option>
                     ))}
@@ -366,7 +362,7 @@ export default function TeacherDashboard() {
                 <div className="text-center mt-4">
                   <button
                     onClick={() => navigate("/teacher/attendance-report")}
-                    className="text-blue-600 text-sm font-bold hover:underline"
+                    className="text-slate-600 text-sm font-bold hover:underline"
                   >
                     View all {reportData.records.length} students →
                   </button>

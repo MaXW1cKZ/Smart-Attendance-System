@@ -16,6 +16,8 @@ import {
   FiUsers,
   FiServer,
   FiList,
+  FiPlay,
+  FiPlusCircle,
 } from "react-icons/fi";
 
 const Sidebar = () => {
@@ -60,12 +62,12 @@ const Sidebar = () => {
         },
         { icon: <FiHome />, label: "Dashboard", path: "/teacher/dashboard" },
         {
-          icon: <FiBook />,
+          icon: <FiPlusSquare />,
           label: "Create Course",
           path: "/teacher/create-course",
         },
         {
-          icon: <FiBook />,
+          icon: <FiSettings />,
           label: "Course Settings",
           path: "/teacher/course-settings",
         },

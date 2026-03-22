@@ -2,12 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useParams, useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
-import {
-  FiArrowLeft,
-  FiSearch,
-  FiUsers,
-  FiTrash2,
-} from "react-icons/fi";
+import { FiArrowLeft, FiSearch, FiUsers, FiTrash2 } from "react-icons/fi";
 
 const EnrolledStudents = () => {
   const { courseId } = useParams();
@@ -49,7 +44,7 @@ const EnrolledStudents = () => {
 
       <main className="flex-1 overflow-y-auto">
         {/* Gradient Header */}
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10 pb-24">
+        <div className="bg-gradient-to-r from-blue-700 to-slate-800 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10">
             <button
               onClick={() => navigate(-1)}
@@ -74,12 +69,9 @@ const EnrolledStudents = () => {
         {/* Floating Content Container */}
         <div className="px-10 -mt-20 pb-10 relative z-20">
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 min-h-[600px] flex flex-col">
-
             {/* Toolbar */}
             <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-              <h2 className="text-xl font-bold text-gray-800">
-                Student List
-              </h2>
+              <h2 className="text-xl font-bold text-gray-800">Student List</h2>
               <div className="flex gap-3 w-full md:w-auto">
                 <div className="relative group flex-1 md:flex-none">
                   <FiSearch className="absolute left-3 top-3 text-gray-400 group-focus-within:text-blue-500" />

@@ -23,6 +23,7 @@ import AttendanceReport from "./pages/teacher/AttendanceReport";
 import DeviceSetup from "./pages/teacher/DeviceSetup";
 import RealTimeAttendance from "./pages/teacher/RealTimeAttendance";
 import EnrolledStudents from "./pages/teacher/EnrolledStudents";
+import CoursePage from "./pages/teacher/ManageCourse";
 
 // Admin
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -143,6 +144,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={["teacher"]}>
               <EnrolledStudents />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/courses/:courseId"
+          element={
+            <ProtectedRoute allowedRoles={["teacher"]}>
+              <CoursePage />
             </ProtectedRoute>
           }
         />

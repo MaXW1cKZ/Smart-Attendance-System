@@ -26,12 +26,10 @@ class CourseCreate(BaseModel):
     day_of_week: str
     start_time: str  # "HH:MM"
     end_time: str  # "HH:MM"
-    # Scoring
     use_scoring: bool = True
     score_present: float = 1.0
     score_late: float = 0.5
     attendance_threshold: int = 80
-    # Timing thresholds (minutes after session start)
     late_after_minutes: int = 15
     absent_after_minutes: int = 60
 
@@ -378,13 +376,10 @@ async def get_course_sessions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # ตรวจสอบว่า course มีอยู่จริง
     course_result = await db.execute(select(Course).where(Course.id == course_id))
     course = course_result.scalars().first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
-
-    # ต้องเป็น teacher เจ้าของ หรือ student ที่ enroll แล้วเท่านั้น
     is_teacher = course.teacher_id == current_user.id
     if not is_teacher:
         enroll_check = await db.execute(
@@ -685,7 +680,6 @@ async def get_face_status(
     return {"registered": registered}
 
 
-# 2. List all courses (สำหรับ student — browse & enroll)
 @router.get("/courses/browse")
 async def browse_courses(
     search: Optional[str] = None,
@@ -719,7 +713,6 @@ async def browse_courses(
 
     rows = (await db.execute(q.offset(skip).limit(limit))).fetchall()
 
-    # ดึง enrollment ของ current user ในรอบเดียว
     my_enrollments = (
         (
             await db.execute(
@@ -754,14 +747,12 @@ async def browse_courses(
     }
 
 
-# 3. Search course แบบ case-insensitive (แทน endpoint เดิม)
-# แก้ endpoint เดิม /courses/search/{course_code} ให้ใช้ ilike
 @router.get("/courses/search/{course_code}")
 async def search_course(course_code: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Course, User.full_name)
         .join(User, Course.teacher_id == User.id)
-        .where(Course.course_code.ilike(course_code.strip()))  # ← ilike แทน ==
+        .where(Course.course_code.ilike(course_code.strip()))
     )
     row = result.first()
     if not row:
@@ -775,3 +766,74 @@ async def search_course(course_code: str, db: AsyncSession = Depends(get_db)):
         "day_of_week": course.day_of_week,
         "teacher_name": teacher_name,
     }
+
+
+@router.get("/{course_id}/students")
+async def get_course_students(course_id: int, db: AsyncSession = Depends(get_db)):
+    stmt = (
+        select(User)
+        .join(Enrollment, User.id == Enrollment.student_id)
+        .where(Enrollment.course_id == course_id)
+    )
+    result = await db.execute(stmt)
+    students = result.scalars().all()
+
+    return [
+        {"student_id": str(student.id), "name": student.full_name}
+        for student in students
+    ]
+
+
+@router.put("/{course_id}")
+async def update_course(
+    course_id: int, data: CourseUpdate, db: AsyncSession = Depends(get_db)
+):
+    stmt = select(Course).where(Course.id == course_id)
+    result = await db.execute(stmt)
+    course = result.scalars().first()
+
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    update_data = data.dict()
+    for key, value in update_data.items():
+        if hasattr(course, key):
+            setattr(course, key, value)
+
+    await db.commit()
+    await db.refresh(course)
+    return {"message": "Settings saved successfully!"}
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: int, db: AsyncSession = Depends(get_db)):
+    stmt = select(ClassSession).where(ClassSession.id == session_id)
+    result = await db.execute(stmt)
+    session_obj = result.scalars().first()
+
+    if not session_obj:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    await db.delete(session_obj)
+    await db.commit()
+    return {"message": "Session deleted permanently"}
+
+
+@router.patch("/sessions/{session_id}")
+async def update_session(
+    session_id: int, update_data: dict, db: AsyncSession = Depends(get_db)
+):
+    stmt = select(ClassSession).where(ClassSession.id == session_id)
+    result = await db.execute(stmt)
+    session_obj = result.scalars().first()
+
+    if not session_obj:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    for key, value in update_data.items():
+        if hasattr(session_obj, key):
+            setattr(session_obj, key, value)
+
+    await db.commit()
+    await db.refresh(session_obj)
+    return {"message": "Session updated"}

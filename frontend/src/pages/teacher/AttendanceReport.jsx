@@ -168,7 +168,7 @@ export default function AttendanceReport() {
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10 pb-24">
+        <div className="bg-gradient-to-r from-blue-700 to-slate-800 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10">
             <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
               <FiFileText className="bg-white/20 p-1.5 rounded-lg" size={36} />
@@ -522,7 +522,7 @@ export default function AttendanceReport() {
 
 function SummaryCard({ label, value, color, icon }) {
   const colors = {
-    blue: "from-blue-500 to-blue-400 shadow-blue-200",
+    blue: "from-blue-600 to-blue-500 shadow-blue-200",
     emerald: "from-emerald-500 to-teal-400 shadow-emerald-200",
     orange: "from-orange-400 to-amber-400 shadow-orange-200",
     rose: "from-rose-500 to-pink-500 shadow-rose-200",

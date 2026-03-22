@@ -105,7 +105,7 @@ const DeviceSetup = () => {
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10 pb-24">
+        <div className="bg-gradient-to-r from-blue-700 to-slate-800 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10 flex justify-between items-start text-white">
             <div>
               <h1 className="text-3xl font-bold mb-1">Start Attendance</h1>
@@ -248,9 +248,9 @@ const DeviceSetup = () => {
           <button
             onClick={handleStartClass}
             disabled={!selectedCourse || loading}
-            className="w-full bg-white text-blue-700 p-7 rounded-[32px] font-black text-2xl shadow-xl shadow-blue-900/10 hover:scale-[1.015] active:scale-[0.99] transition-all flex items-center justify-center gap-5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            className="w-full bg-white text-slate-800 p-7 rounded-[32px] font-black text-2xl shadow-xl shadow-slate-900/10 hover:scale-[1.015] active:scale-[0.99] transition-all flex items-center justify-center gap-5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
-            <div className="w-14 h-14 bg-blue-700 text-white rounded-full flex items-center justify-center shadow-lg shadow-blue-300">
+            <div className="w-14 h-14 bg-slate-800 text-white rounded-full flex items-center justify-center shadow-lg shadow-slate-300">
               {loading ? (
                 <FiLoader className="animate-spin" size={24} />
               ) : (
