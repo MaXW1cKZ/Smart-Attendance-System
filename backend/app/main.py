@@ -15,13 +15,15 @@ app = FastAPI(title="Smart Attendance API", version="1.0.0")
 
 # Settings CORS
 origins = [
-    "http://localhost:5173",  # React
-    "http://127.0.0.1:5173",  # React IP
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    # Any localhost / 127.0.0.1 port (e.g. 5174, 4173) for dev
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

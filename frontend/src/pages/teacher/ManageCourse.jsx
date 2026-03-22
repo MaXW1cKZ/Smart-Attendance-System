@@ -31,6 +31,13 @@ const DAYS = [
   "Sunday",
 ];
 
+/** Local part before @, e.g. 65070282@kmitl.ac.th → 65070282 */
+function studentIdFromEmail(email) {
+  if (!email || typeof email !== "string") return "";
+  const i = email.indexOf("@");
+  return i === -1 ? email.trim() : email.slice(0, i).trim();
+}
+
 function ConfirmModal({
   title,
   message,
@@ -802,17 +809,24 @@ function StudentsTab({ courseId }) {
     fetchStudents();
   }, [fetchStudents]);
 
-  const filtered = students.filter(
-    (s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      String(s.student_id).includes(search),
-  );
+  const filtered = students.filter((s) => {
+    const idFromEmail = studentIdFromEmail(s.email);
+    const q = search.toLowerCase();
+    return (
+      s.name.toLowerCase().includes(q) ||
+      idFromEmail.toLowerCase().includes(q) ||
+      (s.email && s.email.toLowerCase().includes(q))
+    );
+  });
 
   const handleExport = () => {
     if (students.length === 0) return;
     const BOM = "\uFEFF";
     const rows = filtered
-      .map((s, i) => `${i + 1},${s.student_id},${s.name}`)
+      .map(
+        (s, i) =>
+          `${i + 1},${studentIdFromEmail(s.email) || s.student_id || ""},${s.name}`,
+      )
       .join("\n");
     const blob = new Blob([BOM + "No.,Student ID,Name\n" + rows], {
       type: "text/csv;charset=utf-8;",
@@ -946,7 +960,7 @@ function StudentsTab({ courseId }) {
             <thead>
               <tr className="text-left text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
                 <th className="pb-3 pl-4 w-12 text-center">No.</th>
-                <th className="pb-3 pl-4">Student ID</th>
+                <th className="pb-3 pl-10">Student ID</th>
                 <th className="pb-3">Name</th>
                 <th className="pb-3 text-gray-400">Email</th>
                 <th className="pb-3 text-center w-20">Action</th>
@@ -961,15 +975,12 @@ function StudentsTab({ courseId }) {
                   <td className="pl-4 text-center font-medium text-gray-300 text-xs">
                     {i + 1}
                   </td>
-                  <td className="pl-4 font-mono text-sm text-gray-500 font-bold">
-                    {s.student_id}
+                  <td className="pl-10 text-sm font-bold text-gray-700">
+                    {studentIdFromEmail(s.email) || s.student_id || "—"}
                   </td>
                   <td>
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
-                        {s.name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="font-bold text-gray-800">{s.name}</span>
+                      <span className="font-bold text-gray-700">{s.name}</span>
                     </div>
                   </td>
                   <td className="text-gray-400 text-xs">{s.email}</td>

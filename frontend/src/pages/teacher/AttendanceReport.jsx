@@ -15,6 +15,7 @@ import {
   FiBarChart2,
   FiRefreshCw,
   FiUsers,
+  FiAlertCircle,
 } from "react-icons/fi";
 
 const STATUS_COLORS = {
@@ -55,6 +56,8 @@ export default function AttendanceReport() {
   const [sortBy, setSortBy] = useState("name");
   const [page, setPage] = useState(1);
   const [editingId, setEditingId] = useState(null);
+  const [reportFetchError, setReportFetchError] = useState(null);
+  const [reportFetchNonce, setReportFetchNonce] = useState(0);
 
   useEffect(() => {
     api
@@ -91,6 +94,7 @@ export default function AttendanceReport() {
     setPage(1);
     setReportData(null);
     setEditingId(null);
+    setReportFetchError(null);
 
     const isOverall = selectedSession === "overall";
     const endpoint = isOverall
@@ -99,16 +103,31 @@ export default function AttendanceReport() {
 
     api
       .get(endpoint)
-      .then((r) => setReportData(r.data))
+      .then((r) => {
+        setReportData(r.data);
+        setReportFetchError(null);
+      })
       .catch((err) => {
         console.error("Fetch Report Error:", err);
-        // เพิ่มแจ้งเตือนถ้า API พัง จะได้รู้ว่าไม่ได้เป็นที่ Frontend
-        alert(
-          `Error loading data: ${err.response?.data?.detail || err.message}\n\n(เช็ค Backend ว่าเพิ่ม API overall-report แล้วหรือยังครับ)`,
-        );
+        const detail = err.response?.data?.detail;
+        const detailStr =
+          typeof detail === "string"
+            ? detail
+            : Array.isArray(detail)
+              ? detail.map((d) => d.msg || d).join(", ")
+              : null;
+        if (!err.response && err.message === "Network Error") {
+          setReportFetchError(
+            "Cannot reach the API server. Start the backend (e.g. uvicorn on port 8000), refresh the page, or check that the dev proxy in vite.config.js matches your setup.",
+          );
+        } else {
+          setReportFetchError(
+            detailStr || err.message || "Failed to load report",
+          );
+        }
       })
       .finally(() => setLoading(false));
-  }, [selectedSession, selectedCourse]);
+  }, [selectedSession, selectedCourse, reportFetchNonce]);
 
   const isOverallView = selectedSession === "overall";
 
@@ -139,7 +158,9 @@ export default function AttendanceReport() {
       if (sortBy === "score") {
         const scoreA = isOverallView ? a.total_score : a.score;
         const scoreB = isOverallView ? b.total_score : b.score;
-        return scoreB - scoreA;
+        const numA = Number(scoreA ?? 0);
+        const numB = Number(scoreB ?? 0);
+        return numB - numA;
       }
       return 0;
     });
@@ -307,7 +328,7 @@ export default function AttendanceReport() {
                     <option value="">— Select Session —</option>
                     {sessions.length > 0 && (
                       <option value="overall">
-                        🌟 Overall Summary (All Sessions)
+                        Overall Summary (All Sessions)
                       </option>
                     )}
                     {sessions.map((s) => (
@@ -325,6 +346,27 @@ export default function AttendanceReport() {
                 </div>
               </div>
             </div>
+
+            {reportFetchError && !loading && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                <div className="flex gap-2 items-start">
+                  <FiAlertCircle
+                    className="shrink-0 mt-0.5 text-rose-500"
+                    size={18}
+                  />
+                  <span className="font-medium leading-relaxed">
+                    {reportFetchError}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReportFetchNonce((n) => n + 1)}
+                  className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-bold text-rose-700 border border-rose-200 hover:bg-rose-100 transition"
+                >
+                  <FiRefreshCw size={14} /> Retry
+                </button>
+              </div>
+            )}
 
             {summary && !isOverallView && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -430,10 +472,14 @@ export default function AttendanceReport() {
               </div>
             ) : !reportData ? (
               <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 py-20">
-                <FiBarChart2 size={48} className="opacity-20" />
-                <p className="text-sm font-medium">
-                  Select a Course and Session to view report
-                </p>
+                {!reportFetchError && (
+                  <>
+                    <FiBarChart2 size={48} className="opacity-20" />
+                    <p className="text-sm font-medium">
+                      Select a Course and Session to view report
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <>
@@ -502,7 +548,9 @@ export default function AttendanceReport() {
                                   {r.absent}
                                 </td>
                                 <td className="text-center font-bold text-gray-700">
-                                  {Number(r.total_score).toFixed(1)}
+                                  {r.total_score == null
+                                    ? "—"
+                                    : Number(r.total_score).toFixed(1)}
                                 </td>
                               </>
                             ) : (

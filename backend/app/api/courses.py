@@ -928,8 +928,19 @@ async def update_session(
     return {"message": "Session updated"}
 
 
-@router.get("/{course_id}/overall-report")
-async def get_course_overall_report(course_id: int, db: AsyncSession = Depends(get_db)):
+@router.get("/courses/{course_id}/overall-report")
+async def get_course_overall_report(
+    course_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalars().first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    if course.teacher_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     stmt_students = (
         select(User)
         .join(Enrollment, User.id == Enrollment.student_id)
@@ -945,14 +956,27 @@ async def get_course_overall_report(course_id: int, db: AsyncSession = Depends(g
         stmt_att = select(Attendance).where(Attendance.session_id.in_(session_ids))
         records = (await db.execute(stmt_att)).scalars().all()
 
+    def _status_key(st) -> str:
+        """DB column is String; may load as str or AttendanceStatus."""
+        if st is None:
+            return ""
+        raw = getattr(st, "value", st)
+        return str(raw).lower()
+
     report = []
     for student in students:
         student_atts = [r for r in records if r.student_id == student.id]
 
-        present = sum(1 for r in student_atts if r.status.value == "present")
-        late = sum(1 for r in student_atts if r.status.value == "late")
-        absent = sum(1 for r in student_atts if r.status.value == "absent")
-        total_score = sum((r.score or 0.0) for r in student_atts)
+        present = sum(1 for r in student_atts if _status_key(r.status) == "present")
+        late = sum(1 for r in student_atts if _status_key(r.status) == "late")
+        absent = sum(1 for r in student_atts if _status_key(r.status) == "absent")
+        # Attendance rows have no score column; derive from course scoring rules
+        if course.use_scoring:
+            total_score = present * float(course.score_present) + late * float(
+                course.score_late
+            )
+        else:
+            total_score = None
 
         report.append(
             {
@@ -970,6 +994,7 @@ async def get_course_overall_report(course_id: int, db: AsyncSession = Depends(g
         "summary": {
             "total_students": len(students),
             "total_sessions": len(session_ids),
+            "use_scoring": course.use_scoring,
         },
         "records": report,
     }
