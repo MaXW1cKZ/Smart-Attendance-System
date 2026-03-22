@@ -7,26 +7,21 @@ import facial from "../assets/facial.gif";
 const Login = () => {
   const navigate = useNavigate();
 
-  // State สำหรับ Login แบบปกติ
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  // ⭐ ตรวจสอบว่า Login อยู่แล้วหรือไม่
   useEffect(() => {
     const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role"); // เช็ค Role ด้วย
+    const role = localStorage.getItem("role");
 
     if (token && role) {
-      // ต้องมีทั้งคู่ถึงจะยอมให้ข้ามไป Dashboard
       navigate("/dashboard");
     } else if (token && !role) {
-      // ถ้ามีแต่ Token แต่ไม่มี Role (ข้อมูลพัง) -> ให้ล้างทิ้งแล้วอยู่หน้า Login ต่อ
       localStorage.clear();
     }
   }, [navigate]);
 
-  // --- ฟังก์ชันส่วนกลาง: จัดการหลัง Login สำเร็จ (ใช้ร่วมกันทั้ง 2 แบบ) ---
   const handleLoginSuccessData = (data) => {
     const { access_token, token_type, role, user_name, user_id } = data;
 
@@ -47,7 +42,6 @@ const Login = () => {
     }
   };
 
-  // --- 1️⃣ Logic: Standard Login ---
   const handleStandardLogin = async (e) => {
     e.preventDefault();
     setError("");
@@ -61,11 +55,11 @@ const Login = () => {
       handleLoginSuccessData(res.data);
     } catch (err) {
       console.error(err);
-      setError("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+      const detail = err.response?.data?.detail;
+      setError(detail || "อีเมลหรือรหัสผ่านไม่ถูกต้อง");
     }
   };
 
-  // --- 2️⃣ Logic: Google Login ---
   const handleGoogleSuccess = async (credentialResponse) => {
     setError("");
     try {
@@ -75,17 +69,14 @@ const Login = () => {
       handleLoginSuccessData(res.data);
     } catch (err) {
       console.error("Google Login Failed:", err);
-      setError("เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
+      const detail = err.response?.data?.detail;
+      setError(detail || "เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
     }
   };
 
-  // --- UI ---
   return (
     <div className="flex h-screen w-full bg-white font-sans overflow-hidden">
-      {/* Left Side - Image Section (Black Theme) */}
-      {/* ⭐ แก้ไข 1: เปลี่ยนพื้นหลังเป็น bg-black (ดำสนิท) */}
       <div className="hidden lg:flex w-1/2 relative bg-black items-center justify-center overflow-hidden">
-        {/* ⭐ แก้ไข 2: ส่วนจัดการรูปภาพ */}
         <div className="relative z-10 w-full max-w-2xl p-4">
           <img
             src={facial}
@@ -95,10 +86,8 @@ const Login = () => {
         </div>
       </div>
 
-      {/* Right Side - Login Form */}
       <div className="w-full lg:w-1/2 flex flex-col justify-center items-center px-8 md:px-16 relative z-20 bg-white/80 backdrop-blur-md">
         <div className="w-full max-w-md space-y-8">
-          {/* Header */}
           <div className="text-center">
             <h1 className="text-4xl font-extrabold text-blue-900 tracking-tight mb-2">
               Smart{" "}
@@ -111,14 +100,12 @@ const Login = () => {
             </p>
           </div>
 
-          {/* Error Message */}
           {error && (
             <div className="bg-red-50 text-red-500 p-3 rounded-lg text-sm text-center">
               {error}
             </div>
           )}
 
-          {/* 1️⃣ Standard Login Form */}
           <form onSubmit={handleStandardLogin} className="space-y-6 mt-8">
             <div>
               <label
@@ -162,7 +149,6 @@ const Login = () => {
             </button>
           </form>
 
-          {/* Divider */}
           <div className="relative flex items-center justify-center my-6">
             <div className="border-t border-gray-200 w-full"></div>
             <span className="bg-white px-4 text-sm text-gray-500 absolute z-10">
@@ -170,7 +156,6 @@ const Login = () => {
             </span>
           </div>
 
-          {/* 2️⃣ Google Login Button */}
           <div className="flex justify-center">
             <GoogleLogin
               onSuccess={handleGoogleSuccess}
@@ -184,7 +169,6 @@ const Login = () => {
             />
           </div>
 
-          {/* Footer */}
           <p className="text-center text-sm text-gray-500 mt-8">
             Don't have an account?{" "}
             <span className="font-semibold text-blue-600 hover:text-blue-500 cursor-pointer">

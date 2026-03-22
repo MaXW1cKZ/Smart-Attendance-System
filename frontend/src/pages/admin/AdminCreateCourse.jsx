@@ -192,6 +192,7 @@ export default function AdminCreateCourse() {
     end_time: "12:00",
     late_after_minutes: 15,
     absent_after_minutes: 60,
+    use_late_absent: true,
     use_scoring: true,
     score_present: 1.0,
     score_late: 0.5,
@@ -214,7 +215,9 @@ export default function AdminCreateCourse() {
       .catch((err) => console.error("Failed to fetch teachers:", err));
   }, []);
 
-  const isTimingValid = form.absent_after_minutes > form.late_after_minutes;
+  const isTimingValid =
+    !form.use_late_absent ||
+    form.absent_after_minutes > form.late_after_minutes;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -231,8 +234,13 @@ export default function AdminCreateCourse() {
     try {
       const payload = {
         ...form,
-        late_after_minutes: Number(form.late_after_minutes),
-        absent_after_minutes: Number(form.absent_after_minutes),
+        // ปิด use_late_absent → 9999 = ไม่มีใครโดน lock ออกหรือ Late ตลอด session
+        late_after_minutes: form.use_late_absent
+          ? Number(form.late_after_minutes)
+          : 9999,
+        absent_after_minutes: form.use_late_absent
+          ? Number(form.absent_after_minutes)
+          : 9999,
         score_present: Number(form.score_present),
         score_late: Number(form.score_late),
         attendance_threshold: Number(form.attendance_threshold),
@@ -354,12 +362,36 @@ export default function AdminCreateCourse() {
 
                 {/* Timing */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-7">
-                  <SectionTitle
-                    icon={<FiClock size={14} />}
-                    color="bg-teal-100 text-teal-600"
-                  >
-                    Attendance Timing
-                  </SectionTitle>
+                  <div className="flex items-center justify-between mb-5">
+                    <SectionTitle
+                      icon={<FiClock size={14} />}
+                      color="bg-teal-100 text-teal-600"
+                    >
+                      Attendance Timing
+                    </SectionTitle>
+                    {/* Toggle use_late_absent */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-xs font-bold text-gray-500">
+                        {form.use_late_absent
+                          ? "Late & Absent"
+                          : "Present / Absent only"}
+                      </span>
+                      <div
+                        onClick={() =>
+                          set("use_late_absent", !form.use_late_absent)
+                        }
+                        className={`w-11 h-6 rounded-full transition-all relative ${
+                          form.use_late_absent ? "bg-teal-500" : "bg-gray-200"
+                        }`}
+                      >
+                        <div
+                          className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${
+                            form.use_late_absent ? "left-5" : "left-0.5"
+                          }`}
+                        />
+                      </div>
+                    </label>
+                  </div>
                   <p className="text-xs text-gray-400 mb-5 font-medium">
                     Timing starts from the moment the teacher presses{" "}
                     <span className="font-bold text-slate-600">
@@ -367,102 +399,124 @@ export default function AdminCreateCourse() {
                     </span>{" "}
                     — not from the scheduled class time.
                   </p>
-                  <div className="grid grid-cols-2 gap-5">
-                    <div className="bg-orange-50 rounded-2xl p-5 border border-orange-100">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-3 h-3 rounded-full bg-orange-400" />
-                        <span className="text-sm font-bold text-orange-700">
-                          Late Threshold
+
+                  {form.use_late_absent ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-5">
+                        <div className="bg-orange-50 rounded-2xl p-5 border border-orange-100">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-3 h-3 rounded-full bg-orange-400" />
+                            <span className="text-sm font-bold text-orange-700">
+                              Late Threshold
+                            </span>
+                          </div>
+                          <p className="text-xs text-orange-500 mb-3">
+                            Students checking in after this time are marked{" "}
+                            <strong>Late</strong>
+                          </p>
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="number"
+                              min="1"
+                              max="180"
+                              value={form.late_after_minutes}
+                              onChange={(e) =>
+                                set(
+                                  "late_after_minutes",
+                                  parseInt(e.target.value) || 1,
+                                )
+                              }
+                              className="fi w-24 text-center text-lg font-black"
+                            />
+                            <span className="text-sm font-bold text-orange-600">
+                              min after start
+                            </span>
+                          </div>
+                        </div>
+                        <div className="bg-rose-50 rounded-2xl p-5 border border-rose-100">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-3 h-3 rounded-full bg-rose-400" />
+                            <span className="text-sm font-bold text-rose-700">
+                              Absent Threshold
+                            </span>
+                          </div>
+                          <p className="text-xs text-rose-500 mb-3">
+                            Check-in is <strong>locked</strong> after this time
+                            — student is Absent
+                          </p>
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="number"
+                              min="1"
+                              max="300"
+                              value={form.absent_after_minutes}
+                              onChange={(e) =>
+                                set(
+                                  "absent_after_minutes",
+                                  parseInt(e.target.value) || 1,
+                                )
+                              }
+                              className={`fi w-24 text-center text-lg font-black ${
+                                !isTimingValid
+                                  ? "border-rose-400 bg-rose-50"
+                                  : ""
+                              }`}
+                            />
+                            <span className="text-sm font-bold text-rose-600">
+                              min after start
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      {!isTimingValid && (
+                        <div className="mt-3 flex items-center gap-2 text-rose-600 text-xs font-semibold bg-rose-50 border border-rose-200 px-4 py-2 rounded-xl">
+                          <FiAlertCircle size={14} />
+                          Absent threshold must be greater than Late threshold
+                        </div>
+                      )}
+                      {isTimingValid && (
+                        <div className="mt-4">
+                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                            <div
+                              className="bg-emerald-400 h-full transition-all"
+                              style={{
+                                width: `${
+                                  (form.late_after_minutes /
+                                    form.absent_after_minutes) *
+                                  100
+                                }%`,
+                              }}
+                            />
+                            <div className="bg-orange-400 h-full flex-1" />
+                          </div>
+                          <div className="flex justify-between text-xs mt-1 font-medium">
+                            <span className="text-emerald-600 font-bold">
+                              ▶ Start (Present)
+                            </span>
+                            <span className="text-orange-500 font-bold">
+                              +{form.late_after_minutes}m Late
+                            </span>
+                            <span className="text-rose-500 font-bold">
+                              +{form.absent_after_minutes}m Absent
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="bg-white- rounded-2xl p-5 border border-gray-100">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-3 h-3 rounded-full bg-emerald-400" />
+                        <span className="text-sm font-bold text-emerald-700">
+                          Present / Absent only
                         </span>
                       </div>
-                      <p className="text-xs text-orange-500 mb-3">
-                        Students checking in after this time are marked{" "}
-                        <strong>Late</strong>
+                      <p className="text-xs text-emerald-600 leading-relaxed">
+                        Students can check in anytime ={" "}
+                        <strong>Present</strong>
+                        <br />
+                        Students who do not check in before the teacher presses <strong>End Session</strong> = <strong>Absent</strong>
                       </p>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="number"
-                          min="1"
-                          max="180"
-                          value={form.late_after_minutes}
-                          onChange={(e) =>
-                            set(
-                              "late_after_minutes",
-                              parseInt(e.target.value) || 1,
-                            )
-                          }
-                          className="fi w-24 text-center text-lg font-black"
-                        />
-                        <span className="text-sm font-bold text-orange-600">
-                          min after start
-                        </span>
-                      </div>
-                    </div>
-                    <div className="bg-rose-50 rounded-2xl p-5 border border-rose-100">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-3 h-3 rounded-full bg-rose-400" />
-                        <span className="text-sm font-bold text-rose-700">
-                          Absent Threshold
-                        </span>
-                      </div>
-                      <p className="text-xs text-rose-500 mb-3">
-                        Check-in is <strong>locked</strong> after this time —
-                        student is Absent
-                      </p>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="number"
-                          min="1"
-                          max="300"
-                          value={form.absent_after_minutes}
-                          onChange={(e) =>
-                            set(
-                              "absent_after_minutes",
-                              parseInt(e.target.value) || 1,
-                            )
-                          }
-                          className={`fi w-24 text-center text-lg font-black ${
-                            !isTimingValid ? "border-rose-400 bg-rose-50" : ""
-                          }`}
-                        />
-                        <span className="text-sm font-bold text-rose-600">
-                          min after start
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  {!isTimingValid && (
-                    <div className="mt-3 flex items-center gap-2 text-rose-600 text-xs font-semibold bg-rose-50 border border-rose-200 px-4 py-2 rounded-xl">
-                      <FiAlertCircle size={14} />
-                      Absent threshold must be greater than Late threshold
-                    </div>
-                  )}
-                  {isTimingValid && (
-                    <div className="mt-4">
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
-                        <div
-                          className="bg-emerald-400 h-full transition-all"
-                          style={{
-                            width: `${
-                              (form.late_after_minutes /
-                                form.absent_after_minutes) *
-                              100
-                            }%`,
-                          }}
-                        />
-                        <div className="bg-orange-400 h-full flex-1" />
-                      </div>
-                      <div className="flex justify-between text-xs mt-1 font-medium">
-                        <span className="text-emerald-600 font-bold">
-                          ▶ Start (Present)
-                        </span>
-                        <span className="text-orange-500 font-bold">
-                          +{form.late_after_minutes}m Late
-                        </span>
-                        <span className="text-rose-500 font-bold">
-                          +{form.absent_after_minutes}m Absent
-                        </span>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -570,8 +624,11 @@ export default function AdminCreateCourse() {
                     </>
                   ) : (
                     <div className="bg-gray-50 rounded-xl p-4 text-sm text-gray-400 font-medium text-center">
-                      Scoring is disabled — attendance will be tracked as
-                      Present / Late / Absent only
+                      Scoring is disabled — attendance will be tracked as{" "}
+                      {form.use_late_absent
+                        ? "Present / Late / Absent"
+                        : "Present / Absent"}{" "}
+                      only
                     </div>
                   )}
                 </div>

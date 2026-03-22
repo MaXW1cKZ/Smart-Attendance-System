@@ -9,6 +9,10 @@ const api = axios.create({
 });
 
 // ขาไป (Request): แนบ Token
+//   baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
+// });
+
+// 1. ขาไป (Request): แนบ Token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");

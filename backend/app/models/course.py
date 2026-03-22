@@ -16,6 +16,7 @@ class Course(Base):
     start_time = Column(Time)
     end_time = Column(Time)
     teacher_id = Column(Integer, ForeignKey("users.id"))
+    use_late_absent = Column(Boolean, default=True)
     use_scoring = Column(Boolean, default=True)
     score_present = Column(Float, default=1.0)
     score_late = Column(Float, default=0.5)

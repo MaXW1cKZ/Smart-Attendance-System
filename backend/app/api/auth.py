@@ -27,6 +27,26 @@ _ADMIN_EMAILS = set(
 )
 
 
+_ALLOWED_DOMAINS = set(
+    d.strip()
+    for d in os.getenv("ALLOWED_DOMAINS", "kmitl.ac.th,it.kmitl.ac.th").split(",")
+    if d.strip()
+)
+
+
+def is_allowed_email(email: str) -> bool:
+    """Block any email not from an institution domain."""
+    parts = email.lower().strip().split("@")
+    if len(parts) != 2:
+        return False
+    domain = parts[1]
+    # Accept exact match or any subdomain of an allowed domain
+    return any(
+        domain == allowed or domain.endswith("." + allowed)
+        for allowed in _ALLOWED_DOMAINS
+    )
+
+
 def detect_role(email: str) -> str:
     """
     Priority order:
@@ -67,6 +87,12 @@ async def google_login(request: GoogleLoginRequest, db: AsyncSession = Depends(g
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid Google Token")
 
+    if not is_allowed_email(email):
+        raise HTTPException(
+            status_code=403,
+            detail="กรุณาใช้อีเมลของสถาบัน (@kmitl.ac.th หรือ @it.kmitl.ac.th) เท่านั้น",
+        )
+
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalars().first()
 
@@ -103,6 +129,12 @@ async def login_for_access_token(
 ):
     result = await db.execute(select(User).where(User.email == form_data.username))
     user = result.scalars().first()
+
+    if not is_allowed_email(form_data.username):
+        raise HTTPException(
+            status_code=403,
+            detail="กรุณาใช้อีเมลของสถาบัน (@kmitl.ac.th หรือ @it.kmitl.ac.th) เท่านั้น",
+        )
 
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(

@@ -15,6 +15,7 @@ import {
   FiBarChart2,
   FiRefreshCw,
   FiUsers,
+  FiAlertCircle,
 } from "react-icons/fi";
 
 const STATUS_COLORS = {
@@ -22,13 +23,24 @@ const STATUS_COLORS = {
   late: "bg-orange-100 text-orange-600 border-orange-200",
   absent: "bg-rose-100 text-rose-600 border-rose-200",
 };
-const STATUS_ICONS = {
-  present: <FiCheckCircle className="mr-1" />,
-  late: <FiClock className="mr-1" />,
-  absent: <FiXCircle className="mr-1" />,
-};
 
 const PAGE_SIZE = 10;
+
+function StatusBadge({ status }) {
+  const map = {
+    present: "bg-emerald-100 text-emerald-600 border-emerald-200",
+    late: "bg-orange-100 text-orange-600 border-orange-200",
+    absent: "bg-rose-100 text-rose-600 border-rose-200",
+  };
+  const labels = { present: "Present", late: "Late", absent: "Absent" };
+  return (
+    <span
+      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${map[status] || "bg-gray-100 text-gray-500 border-gray-200"}`}
+    >
+      {labels[status] || status}
+    </span>
+  );
+}
 
 export default function AttendanceReport() {
   const [courses, setCourses] = useState([]);
@@ -43,6 +55,8 @@ export default function AttendanceReport() {
   const [sortBy, setSortBy] = useState("name");
   const [page, setPage] = useState(1);
   const [editingId, setEditingId] = useState(null);
+  const [reportFetchError, setReportFetchError] = useState(null);
+  const [reportFetchNonce, setReportFetchNonce] = useState(0);
 
   useEffect(() => {
     api
@@ -74,36 +88,83 @@ export default function AttendanceReport() {
   }, [selectedCourse]);
 
   useEffect(() => {
-    if (!selectedSession) return;
+    if (!selectedSession || !selectedCourse) return;
     setLoading(true);
     setPage(1);
     setReportData(null);
+    setEditingId(null);
+    setReportFetchError(null);
+
+    const isOverall = selectedSession === "overall";
+    const endpoint = isOverall
+      ? `/courses/${selectedCourse.id}/overall-report`
+      : `/sessions/${selectedSession.id}/attendance`;
+
     api
-      .get(`/sessions/${selectedSession.id}/attendance`)
-      .then((r) => setReportData(r.data))
-      .catch(console.error)
+      .get(endpoint)
+      .then((r) => {
+        setReportData(r.data);
+        setReportFetchError(null);
+      })
+      .catch((err) => {
+        console.error("Fetch Report Error:", err);
+        const detail = err.response?.data?.detail;
+        const detailStr =
+          typeof detail === "string"
+            ? detail
+            : Array.isArray(detail)
+              ? detail.map((d) => d.msg || d).join(", ")
+              : null;
+        if (!err.response && err.message === "Network Error") {
+          setReportFetchError(
+            "Cannot reach the API server. Start the backend (e.g. uvicorn on port 8000), refresh the page, or check that the dev proxy in vite.config.js matches your setup.",
+          );
+        } else {
+          setReportFetchError(
+            detailStr || err.message || "Failed to load report",
+          );
+        }
+      })
       .finally(() => setLoading(false));
-  }, [selectedSession]);
+  }, [selectedSession, selectedCourse, reportFetchNonce]);
+
+  const isOverallView = selectedSession === "overall";
 
   const filtered = useMemo(() => {
-    if (!reportData) return [];
+    if (!reportData?.records) return [];
     let rows = [...reportData.records];
-    if (search)
-      rows = rows.filter(
-        (r) =>
+
+    if (search) {
+      rows = rows.filter((r) => {
+        const realStudentId = r.email
+          ? r.email.split("@")[0]
+          : String(r.student_id);
+        return (
           r.name.toLowerCase().includes(search.toLowerCase()) ||
-          String(r.student_id).includes(search),
-      );
-    if (filterStatus !== "all")
+          realStudentId.includes(search)
+        );
+      });
+    }
+
+    if (!isOverallView && filterStatus !== "all") {
       rows = rows.filter((r) => r.status === filterStatus);
+    }
+
     rows.sort((a, b) => {
       if (sortBy === "name") return a.name.localeCompare(b.name);
-      if (sortBy === "status") return a.status.localeCompare(b.status);
-      if (sortBy === "score") return b.score - a.score;
+      if (sortBy === "status" && !isOverallView)
+        return a.status.localeCompare(b.status);
+      if (sortBy === "score") {
+        const scoreA = isOverallView ? a.total_score : a.score;
+        const scoreB = isOverallView ? b.total_score : b.score;
+        const numA = Number(scoreA ?? 0);
+        const numB = Number(scoreB ?? 0);
+        return numB - numA;
+      }
       return 0;
     });
     return rows;
-  }, [reportData, search, filterStatus, sortBy]);
+  }, [reportData, search, filterStatus, sortBy, isOverallView]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -121,30 +182,59 @@ export default function AttendanceReport() {
 
   const handleExportCSV = () => {
     if (!reportData || !selectedCourse || !selectedSession) return;
-    const headers = [
-      "#",
-      "Name",
-      "Student ID",
-      "Email",
-      "Check-in Time",
-      "Status",
-      "Score",
-    ];
-    const rows = filtered.map((r, i) => [
-      i + 1,
-      r.name,
-      r.student_id,
-      r.email,
-      r.timestamp
-        ? new Date(r.timestamp).toLocaleTimeString("en-US", { hour12: false })
-        : "-",
-      r.status,
-      r.score,
-    ]);
+
+    let headers = [];
+    let rows = [];
+
+    if (isOverallView) {
+      headers = [
+        "#",
+        "Student ID",
+        "Name",
+        "Email",
+        "Present",
+        "Late",
+        "Absent",
+        "Total Score",
+      ];
+      rows = filtered.map((r, i) => {
+        const sid = r.email ? r.email.split("@")[0] : r.student_id;
+        return [
+          i + 1,
+          sid,
+          r.name,
+          r.email || "-",
+          r.present,
+          r.late,
+          r.absent,
+          r.total_score,
+        ];
+      });
+    } else {
+      headers = [
+        "#",
+        "Student ID",
+        "Name",
+        "Email",
+        "Check-in Time",
+        "Status",
+        "Score",
+      ];
+      rows = filtered.map((r, i) => {
+        const sid = r.email ? r.email.split("@")[0] : r.student_id;
+        const time = r.timestamp
+          ? new Date(r.timestamp).toLocaleTimeString("en-US", { hour12: false })
+          : "-";
+        return [i + 1, sid, r.name, r.email || "-", time, r.status, r.score];
+      });
+    }
+
+    const titleInfo = isOverallView
+      ? `Course: ${selectedCourse.name} (${selectedCourse.course_code}) - Overall Summary`
+      : `Course: ${selectedCourse.name} (${selectedCourse.course_code}) - Week ${selectedSession.week_number}`;
 
     const csvContent = [
-      `Course: ${selectedCourse.name} (${selectedCourse.course_code})`,
-      `Session: Week ${selectedSession.week_number} — ${selectedSession.date || ""}`,
+      titleInfo,
       `Exported: ${new Date().toLocaleString("en-US")}`,
       "",
       headers.join(","),
@@ -157,25 +247,42 @@ export default function AttendanceReport() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `attendance_${selectedCourse.course_code}_week${selectedSession.week_number}.csv`;
+    a.download = isOverallView
+      ? `overall_${selectedCourse.course_code}.csv`
+      : `attendance_${selectedCourse.course_code}_week${selectedSession.week_number}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
+  // ✅ คำนวณ Overall Summary ให้แสดงผลเป็น StatCard
+  const overallSummary = useMemo(() => {
+    if (!isOverallView || !reportData?.records) return null;
+    let present = 0,
+      late = 0,
+      absent = 0;
+    reportData.records.forEach((r) => {
+      present += r.present || 0;
+      late += r.late || 0;
+      absent += r.absent || 0;
+    });
+    return { total: reportData.records.length, present, late, absent };
+  }, [isOverallView, reportData]);
+
   const summary = reportData?.summary;
+  const currentSummary = isOverallView ? overallSummary : summary;
 
   return (
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10 pb-24">
+        <div className="bg-gradient-to-r from-blue-700 to-slate-900 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10">
             <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
               <FiFileText className="bg-white/20 p-1.5 rounded-lg" size={36} />
               Attendance Report
             </h1>
             <p className="text-blue-100 opacity-90 pl-1">
-              View and manage attendance records for each session
+              View and manage attendance records for each session or full term
             </p>
           </div>
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
@@ -217,26 +324,32 @@ export default function AttendanceReport() {
                 <div className="relative">
                   <select
                     className="w-full appearance-none bg-gray-50 text-gray-700 font-bold pl-4 pr-10 py-3 rounded-xl border border-gray-200 focus:outline-none cursor-pointer text-sm disabled:opacity-50"
-                    value={selectedSession?.id || ""}
+                    value={
+                      isOverallView ? "overall" : selectedSession?.id || ""
+                    }
                     disabled={!selectedCourse || sessions.length === 0}
                     onChange={(e) => {
-                      const s = sessions.find(
-                        (x) => x.id === parseInt(e.target.value),
-                      );
-                      setSelectedSession(s || null);
+                      if (e.target.value === "overall") {
+                        setSelectedSession("overall");
+                      } else {
+                        const s = sessions.find(
+                          (x) => x.id === parseInt(e.target.value),
+                        );
+                        setSelectedSession(s || null);
+                      }
                     }}
                   >
                     <option value="">— Select Session —</option>
+                    {sessions.length > 0 && (
+                      <option value="overall">
+                        Overall Summary (All Sessions)
+                      </option>
+                    )}
                     {sessions.map((s) => (
                       <option key={s.id} value={s.id}>
                         Week {s.week_number}
                         {s.date
-                          ? ` · ${new Date(
-                              s.date + "T12:00",
-                            ).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                            })}`
+                          ? ` · ${new Date(s.date + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
                           : ""}
                         {s.is_active ? " 🔴 Live" : ""}
                         {s.topic ? ` · ${s.topic}` : ""}
@@ -248,29 +361,51 @@ export default function AttendanceReport() {
               </div>
             </div>
 
-            {summary && (
+            {reportFetchError && !loading && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                <div className="flex gap-2 items-start">
+                  <FiAlertCircle
+                    className="shrink-0 mt-0.5 text-rose-500"
+                    size={18}
+                  />
+                  <span className="font-medium leading-relaxed">
+                    {reportFetchError}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReportFetchNonce((n) => n + 1)}
+                  className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-bold text-rose-700 border border-rose-200 hover:bg-rose-100 transition"
+                >
+                  <FiRefreshCw size={14} /> Retry
+                </button>
+              </div>
+            )}
+
+            {/* ✅ แสดง SummaryCard เสมอ ไม่ว่าจะเป็น Overall หรือ Session ย่อย */}
+            {currentSummary && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <SummaryCard
-                  label="Total Students"
-                  value={summary.total}
+                  label={isOverallView ? "Enrolled Students" : "Total Students"}
+                  value={currentSummary.total}
                   color="blue"
                   icon={<FiUsers size={14} />}
                 />
                 <SummaryCard
-                  label="Present"
-                  value={summary.present}
+                  label={isOverallView ? "Total Present" : "Present"}
+                  value={currentSummary.present}
                   color="emerald"
                   icon={<FiCheckCircle size={14} />}
                 />
                 <SummaryCard
-                  label="Late"
-                  value={summary.late}
+                  label={isOverallView ? "Total Late" : "Late"}
+                  value={currentSummary.late}
                   color="orange"
                   icon={<FiClock size={14} />}
                 />
                 <SummaryCard
-                  label="Absent"
-                  value={summary.absent}
+                  label={isOverallView ? "Total Absent" : "Absent"}
+                  value={currentSummary.absent}
                   color="rose"
                   icon={<FiXCircle size={14} />}
                 />
@@ -296,25 +431,29 @@ export default function AttendanceReport() {
                       className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-200 w-52"
                     />
                   </div>
-                  <div className="relative">
-                    <select
-                      className="appearance-none pl-3 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none cursor-pointer"
-                      value={filterStatus}
-                      onChange={(e) => {
-                        setFilterStatus(e.target.value);
-                        setPage(1);
-                      }}
-                    >
-                      <option value="all">All Statuses</option>
-                      <option value="present">Present</option>
-                      <option value="late">Late</option>
-                      <option value="absent">Absent</option>
-                    </select>
-                    <FiChevronDown
-                      className="absolute right-2 top-2.5 text-gray-400 pointer-events-none"
-                      size={14}
-                    />
-                  </div>
+
+                  {!isOverallView && (
+                    <div className="relative">
+                      <select
+                        className="appearance-none pl-3 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none cursor-pointer"
+                        value={filterStatus}
+                        onChange={(e) => {
+                          setFilterStatus(e.target.value);
+                          setPage(1);
+                        }}
+                      >
+                        <option value="all">All Statuses</option>
+                        <option value="present">Present</option>
+                        <option value="late">Late</option>
+                        <option value="absent">Absent</option>
+                      </select>
+                      <FiChevronDown
+                        className="absolute right-2 top-2.5 text-gray-400 pointer-events-none"
+                        size={14}
+                      />
+                    </div>
+                  )}
+
                   <div className="relative">
                     <select
                       className="appearance-none pl-3 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none cursor-pointer"
@@ -322,7 +461,9 @@ export default function AttendanceReport() {
                       onChange={(e) => setSortBy(e.target.value)}
                     >
                       <option value="name">Sort: Name</option>
-                      <option value="status">Sort: Status</option>
+                      {!isOverallView && (
+                        <option value="status">Sort: Status</option>
+                      )}
                       <option value="score">Sort: Score</option>
                     </select>
                     <FiChevronDown
@@ -341,138 +482,172 @@ export default function AttendanceReport() {
             )}
 
             {loading ? (
-              <div className="flex-1 flex items-center justify-center text-gray-400">
+              <div className="flex-1 flex items-center justify-center text-gray-400 py-20">
                 <FiRefreshCw className="animate-spin mr-2" /> Loading...
               </div>
             ) : !reportData ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3">
-                <FiBarChart2 size={48} className="opacity-20" />
-                <p className="text-sm font-medium">
-                  Select a Course and Session to view report
-                </p>
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 py-20">
+                {!reportFetchError && (
+                  <>
+                    <FiBarChart2 size={48} className="opacity-20" />
+                    <p className="text-sm font-medium">
+                      Select a Course and Session to view report
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <>
-                <div className="overflow-x-auto flex-1">
-                  <table className="w-full min-w-[900px] text-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="text-left text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                        <th className="pb-3 pl-4 w-12">#</th>
-                        <th className="pb-3">Student Name</th>
-                        <th className="pb-3">Student ID</th>
-                        <th className="pb-3 text-center">Check-in Time</th>
-                        <th className="pb-3">Email</th>
-                        <th className="pb-3 text-center">Score</th>
-                        <th className="pb-3 text-center">Status</th>
-                        <th className="pb-3 text-center">Edit</th>
+                        <th className="pb-3 pl-4">#</th>
+                        <th className="pb-3 pl-4">Student ID</th>
+                        <th className="pb-3">Name</th>
+
+                        {isOverallView ? (
+                          <>
+                            <th className="pb-3 text-center">Present</th>
+                            <th className="pb-3 text-center">Late</th>
+                            <th className="pb-3 text-center">Absent</th>
+                            <th className="pb-3 text-center">Total Score</th>
+                          </>
+                        ) : (
+                          <>
+                            <th className="pb-3 text-center">Check-in Time</th>
+                            <th className="pb-3 text-center">Score</th>
+                            <th className="pb-3 text-center">Status</th>
+                            <th className="pb-3 text-center">Edit</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
-                      {paginated.map((item, i) => (
-                        <tr
-                          key={item.attendance_id}
-                          className="border-b border-gray-50 hover:bg-gray-50/80 transition h-16"
-                        >
-                          <td className="pl-4 text-gray-400 font-medium">
-                            {(page - 1) * PAGE_SIZE + i + 1}
-                          </td>
-                          <td>
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold shrink-0">
-                                {item.name?.charAt(0) || "?"}
+                      {paginated.map((r, i) => {
+                        const realStudentId = r.email
+                          ? r.email.split("@")[0]
+                          : `ID:${r.student_id}`;
+
+                        return (
+                          <tr
+                            key={r.attendance_id || r.student_id}
+                            className="border-b border-gray-50 hover:bg-gray-50 transition h-14"
+                          >
+                            <td className="pl-4 text-gray-400 text-xs font-medium">
+                              {(page - 1) * PAGE_SIZE + i + 1}
+                            </td>
+                            <td className="pl-4 font-bold text-black text-sm">
+                              {realStudentId}
+                            </td>
+                            <td>
+                              <div className="flex items-center gap-3">
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-gray-800">
+                                    {r.name}
+                                  </span>
+                                </div>
                               </div>
-                              <span className="font-bold text-gray-800">
-                                {item.name}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="text-gray-500 font-mono text-xs">
-                            {item.student_id}
-                          </td>
-                          <td className="text-center font-medium text-gray-600 text-xs">
-                            {item.timestamp ? (
-                              new Date(item.timestamp).toLocaleTimeString(
-                                "en-US",
-                                {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  hour12: false,
-                                },
-                              )
+                            </td>
+
+                            {isOverallView ? (
+                              <>
+                                <td className="text-center font-bold text-emerald-600">
+                                  {r.present}
+                                </td>
+                                <td className="text-center font-bold text-orange-500">
+                                  {r.late}
+                                </td>
+                                <td className="text-center font-bold text-rose-500">
+                                  {r.absent}
+                                </td>
+                                <td className="text-center font-bold text-gray-700">
+                                  {r.total_score == null
+                                    ? "—"
+                                    : Number(r.total_score).toFixed(1)}
+                                </td>
+                              </>
                             ) : (
-                              <span className="text-gray-300">—</span>
-                            )}
-                          </td>
-                          <td className="text-gray-500 text-xs">
-                            {item.email}
-                          </td>
-                          <td className="text-center font-bold text-gray-700">
-                            {item.score}
-                          </td>
-                          <td className="text-center">
-                            {editingId === item.attendance_id ? (
-                              <div className="flex gap-1 justify-center">
-                                {["present", "late", "absent"].map((s) => (
+                              <>
+                                <td className="text-center text-xs text-gray-500 font-medium">
+                                  {r.timestamp
+                                    ? new Date(r.timestamp).toLocaleTimeString(
+                                        "en-US",
+                                        {
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                          hour12: false,
+                                        },
+                                      )
+                                    : "—"}
+                                </td>
+                                <td className="text-center font-bold text-gray-700">
+                                  {r.score}
+                                </td>
+                                <td className="text-center">
+                                  {editingId === r.attendance_id ? (
+                                    <div className="flex gap-1 justify-center">
+                                      {["present", "late", "absent"].map(
+                                        (s) => (
+                                          <button
+                                            key={s}
+                                            onClick={() =>
+                                              handleStatusChange(
+                                                r.attendance_id,
+                                                s,
+                                              )
+                                            }
+                                            className={`px-2 py-1 rounded-lg text-xs font-bold border transition-all capitalize ${STATUS_COLORS[s]}`}
+                                          >
+                                            {s}
+                                          </button>
+                                        ),
+                                      )}
+                                      <button
+                                        onClick={() => setEditingId(null)}
+                                        className="px-2 py-1 rounded-lg text-[10px] font-bold border border-gray-200 text-gray-400 hover:bg-gray-50"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <StatusBadge status={r.status} />
+                                  )}
+                                </td>
+                                <td className="text-center">
                                   <button
-                                    key={s}
                                     onClick={() =>
-                                      handleStatusChange(item.attendance_id, s)
+                                      setEditingId(
+                                        editingId === r.attendance_id
+                                          ? null
+                                          : r.attendance_id,
+                                      )
                                     }
-                                    className={`px-2 py-1 rounded-lg text-xs font-bold border transition-all capitalize ${STATUS_COLORS[s]}`}
+                                    className="text-gray-400 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-50 transition-colors"
                                   >
-                                    {s === "present"
-                                      ? "Present"
-                                      : s === "late"
-                                        ? "Late"
-                                        : "Absent"}
+                                    <FiEdit size={15} />
                                   </button>
-                                ))}
-                                <button
-                                  onClick={() => setEditingId(null)}
-                                  className="px-2 py-1 rounded-lg text-xs font-bold border border-gray-200 text-gray-400 hover:bg-gray-50"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              <span
-                                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${STATUS_COLORS[item.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}
-                              >
-                                {STATUS_ICONS[item.status]}
-                                {item.status === "present"
-                                  ? "Present"
-                                  : item.status === "late"
-                                    ? "Late"
-                                    : "Absent"}
-                              </span>
+                                </td>
+                              </>
                             )}
-                          </td>
-                          <td className="text-center">
-                            <button
-                              onClick={() =>
-                                setEditingId(
-                                  editingId === item.attendance_id
-                                    ? null
-                                    : item.attendance_id,
-                                )
-                              }
-                              className="text-gray-400 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-50 transition-colors"
-                            >
-                              <FiEdit size={15} />
-                            </button>
+                          </tr>
+                        );
+                      })}
+                      {filtered.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan="8"
+                            className="py-12 text-center text-gray-400 font-medium bg-gray-50/50"
+                          >
+                            No records match your search criteria
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
-                  {filtered.length === 0 && (
-                    <div className="text-center py-12 text-gray-400 text-sm font-medium">
-                      No records match your search criteria
-                    </div>
-                  )}
                 </div>
 
-                <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                <div className="flex justify-between items-center pt-4 border-t border-gray-100 mt-2">
                   <span className="text-sm text-gray-400">
                     Showing{" "}
                     {Math.min((page - 1) * PAGE_SIZE + 1, filtered.length)}–
@@ -522,7 +697,7 @@ export default function AttendanceReport() {
 
 function SummaryCard({ label, value, color, icon }) {
   const colors = {
-    blue: "from-blue-500 to-blue-400 shadow-blue-200",
+    blue: "from-blue-600 to-blue-500 shadow-blue-200",
     emerald: "from-emerald-500 to-teal-400 shadow-emerald-200",
     orange: "from-orange-400 to-amber-400 shadow-orange-200",
     rose: "from-rose-500 to-pink-500 shadow-rose-200",

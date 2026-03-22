@@ -1,34 +1,42 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import api from "../../api/axios";
 import Sidebar from "../../components/Sidebar";
 import {
   FiBook,
   FiClock,
-  FiChevronDown,
   FiCheckCircle,
-  FiActivity,
-  FiBarChart2,
-  FiTrendingUp,
   FiPlusSquare,
   FiXCircle,
   FiAlertCircle,
+  FiCamera,
+  FiArrowRight,
+  FiAlertTriangle,
+  FiChevronRight,
+  FiUser,
+  FiBarChart2,
+  FiCalendar,
 } from "react-icons/fi";
+
+const pctBarColor = (pct, threshold) => {
+  if (pct >= threshold) return "bg-emerald-400";
+  if (pct >= threshold * 0.85) return "bg-orange-400";
+  return "bg-rose-500";
+};
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const successMsg = location.state?.message || null;
 
+  const studentName = localStorage.getItem("user_name") || "Student";
   const studentId = parseInt(localStorage.getItem("user_id"));
 
-  const [courses, setCourses] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [selectedCourse, setSelectedCourse] = useState(null);
-  const [selectedSession, setSelectedSession] = useState(null);
-  const [reportData, setReportData] = useState(null);
-  const [loadingReport, setLoadingReport] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [faceRegistered, setFaceRegistered] = useState(null);
+  const [courses, setCourses] = useState([]);
+  const [reports, setReports] = useState({});
+  const [loadingReports, setLoadingReports] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -37,80 +45,78 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     api
+      .get("/student/face-status")
+      .then((r) => setFaceRegistered(r.data.registered))
+      .catch(() => setFaceRegistered(false));
+  }, []);
+
+  useEffect(() => {
+    api
       .get("/student/my-courses")
-      .then((r) => {
-        setCourses(r.data);
-      })
+      .then((r) => setCourses(r.data))
       .catch(console.error);
   }, []);
 
   useEffect(() => {
-    if (!selectedCourse) return;
-    setSessions([]);
-    setSelectedSession(null);
-    setReportData(null);
-    api
-      .get(`/courses/${selectedCourse.id}/sessions`)
-      .then((r) => {
-        const started = r.data.filter(
-          (s) => s.actual_start_time || s.is_active,
-        );
-        setSessions(started);
-        if (started.length > 0) {
-          const latest = started.reduce((a, b) =>
-            a.week_number > b.week_number ? a : b,
-          );
-          setSelectedSession(latest);
-        }
+    if (courses.length === 0) return;
+    setLoadingReports(true);
+    Promise.all(
+      courses.map((c) =>
+        api
+          .get(`/courses/${c.id}/report`)
+          .then((r) => ({ courseId: c.id, data: r.data }))
+          .catch(() => ({ courseId: c.id, data: null })),
+      ),
+    )
+      .then((results) => {
+        const map = {};
+        results.forEach(({ courseId, data }) => {
+          map[courseId] = data;
+        });
+        setReports(map);
       })
-      .catch(console.error);
-  }, [selectedCourse]);
+      .finally(() => setLoadingReports(false));
+  }, [courses]);
 
-  useEffect(() => {
-    if (!selectedSession) return;
-    if (!selectedSession.actual_start_time && !selectedSession.is_active) {
-      setReportData(null);
-      return;
-    }
-    setLoadingReport(true);
-    setReportData(null);
-    api
-      .get(`/sessions/${selectedSession.id}/attendance`)
-      .then((r) => setReportData(r.data))
-      .catch(console.error)
-      .finally(() => setLoadingReport(false));
-  }, [selectedSession]);
-
-  const myRecord = reportData?.records?.find((r) => r.student_id === studentId);
-
-  const totalAttended = sessions.filter((s) => s.actual_end_time).length;
-
-  const sessionStatus = myRecord?.status ?? null;
+  const todayStr = currentTime.toLocaleDateString("en-US", { weekday: "long" });
+  const enrolledCount = courses.length;
+  const classesThisWeek = courses.length;
+  const classesToday = courses.filter((c) => c.day_of_week === todayStr).length;
+  const warningCourses = courses.filter((c) => {
+    const r = reports[c.id];
+    if (!r) return false;
+    const me = r.students?.find((s) => s.student_id === studentId);
+    return me && me.attendance_pct < (r.course?.attendance_threshold || 80);
+  });
+  const atRiskCount = warningCourses.length;
+  const hour = currentTime.getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-600 h-64 relative px-10 pt-10">
-          <div className="flex justify-between items-start">
+        {/* ── Header ── */}
+        <div className="bg-gradient-to-r from-blue-700 to-slate-900 h-52 sm:h-64 relative px-4 sm:px-8 md:px-10 pt-14 sm:pt-10 pb-20 sm:pb-24">
+          <div className="flex justify-between items-start relative z-10">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-1">
-                Student Dashboard
-              </h1>
-              <p className="text-blue-100 text-sm opacity-80">
-                Overview of your courses and attendance
+              <p className="text-blue-100 text-xs sm:text-sm font-medium mb-1">
+                {greeting}
               </p>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 flex items-center gap-2 sm:gap-3">
+                <FiUser
+                  className="bg-white/10 p-1.5 rounded-lg hidden sm:block"
+                  size={32}
+                />
+                {studentName}
+              </h1>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => navigate("/student/enroll")}
-                className="bg-white/15 hover:bg-white/25 border border-white/30 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition"
-              >
-                <FiPlusSquare size={16} /> Join Course
-              </button>
-              <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-5 py-3 text-white flex items-center gap-3">
-                <FiClock size={18} />
-                <span className="font-mono font-bold text-xl tracking-widest">
+            {/* clock — hidden on small mobile */}
+            <div className="hidden sm:flex items-center gap-3">
+              <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-3 sm:px-5 py-2 sm:py-3 text-white flex items-center gap-2 sm:gap-3">
+                <FiClock size={16} />
+                <span className="font-mono font-bold text-base sm:text-xl tracking-widest">
                   {currentTime.toLocaleTimeString("en-US", { hour12: false })}
                 </span>
               </div>
@@ -118,383 +124,267 @@ export default function StudentDashboard() {
           </div>
 
           {successMsg && (
-            <div className="absolute bottom-4 left-10 right-10 bg-emerald-500/90 backdrop-blur text-white px-5 py-3 rounded-xl text-sm font-semibold flex items-center gap-2">
+            <div className="absolute bottom-4 left-4 right-4 sm:left-10 sm:right-10 bg-emerald-500/90 backdrop-blur text-white px-4 sm:px-5 py-3 rounded-xl text-sm font-semibold flex items-center gap-2 z-10">
               <FiCheckCircle /> {successMsg}
             </div>
           )}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
         </div>
 
-        <div className="px-10 -mt-24 relative z-10 grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-          <StatCard
-            icon={<FiBook />}
-            label="Enrolled Courses"
-            value={courses.length}
-            sub="courses this semester"
-            gradient="from-blue-500 to-indigo-500"
-            shadow="shadow-blue-200"
-          />
-          <StatCard
-            icon={<FiActivity />}
-            label="Sessions Completed"
-            value={selectedCourse ? totalAttended : "—"}
-            sub={
-              selectedCourse ? selectedCourse.name : "Select a course to view"
-            }
-            gradient="from-emerald-500 to-teal-400"
-            shadow="shadow-emerald-200"
-          />
-          <StatCard
-            icon={<FiTrendingUp />}
-            label="My Status"
-            value={
-              sessionStatus
-                ? sessionStatus.charAt(0).toUpperCase() + sessionStatus.slice(1)
-                : "—"
-            }
-            sub={
-              selectedSession
-                ? `Week ${selectedSession.week_number}`
-                : "Select a session to view"
-            }
-            gradient={
-              sessionStatus === "present"
-                ? "from-emerald-400 to-teal-400"
-                : sessionStatus === "late"
-                  ? "from-amber-400 to-orange-400"
-                  : sessionStatus === "absent"
-                    ? "from-rose-500 to-pink-500"
-                    : "from-amber-400 to-orange-400"
-            }
-            shadow={
-              sessionStatus === "absent"
-                ? "shadow-rose-200"
-                : "shadow-orange-200"
-            }
-          />
-        </div>
-
-        <div className="px-10 pb-10 space-y-6">
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2">
-              <FiBarChart2 className="text-blue-500" /> View My Attendance
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
-                  Course
-                </label>
-                <div className="relative">
-                  <select
-                    className="w-full appearance-none bg-blue-50 text-blue-900 font-bold pl-4 pr-10 py-3 rounded-xl border border-blue-100 focus:outline-none cursor-pointer"
-                    value={selectedCourse?.id || ""}
-                    onChange={(e) => {
-                      const c = courses.find(
-                        (x) => x.id === parseInt(e.target.value),
-                      );
-                      setSelectedCourse(c || null);
-                    }}
-                  >
-                    <option value="">— Select Course —</option>
-                    {courses.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.course_code}: {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <FiChevronDown className="absolute right-3 top-3.5 text-blue-500 pointer-events-none" />
+        {/* ── Content ── */}
+        <div className="px-4 sm:px-8 md:px-10 -mt-16 sm:-mt-20 pb-8 sm:pb-10 relative z-20">
+          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-gray-100 p-5 sm:p-8 min-h-[500px] flex flex-col gap-5 sm:gap-6">
+            {/* Face registration banner */}
+            {faceRegistered === false && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-amber-50 border border-amber-200 rounded-2xl px-4 sm:px-5 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600 shrink-0">
+                    <FiCamera size={18} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-amber-800 text-sm">
+                      Face not registered yet
+                    </p>
+                    <p className="text-xs text-amber-600 mt-0.5">
+                      Register your face to check in automatically during
+                      sessions.
+                    </p>
+                  </div>
                 </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
-                  Session
-                </label>
-                <div className="relative">
-                  <select
-                    className="w-full appearance-none bg-gray-50 text-gray-700 font-bold pl-4 pr-10 py-3 rounded-xl border border-gray-200 focus:outline-none cursor-pointer disabled:opacity-50"
-                    value={selectedSession?.id || ""}
-                    disabled={!selectedCourse || sessions.length === 0}
-                    onChange={(e) => {
-                      const s = sessions.find(
-                        (x) => x.id === parseInt(e.target.value),
-                      );
-                      setSelectedSession(s || null);
-                    }}
-                  >
-                    <option value="">— Select Session —</option>
-                    {sessions.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        Week {s.week_number}
-                        {s.date
-                          ? ` · ${new Date(s.date + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                          : ""}
-                        {s.is_active ? " 🔴 Live" : s.actual_end_time ? "" : ""}
-                        {s.topic ? ` · ${s.topic}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <FiChevronDown className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {loadingReport ? (
-            <div className="bg-white rounded-3xl p-10 text-center text-gray-400 font-medium">
-              Loading attendance data...
-            </div>
-          ) : reportData ? (
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
-              {reportData.session && (
-                <div className="mb-5 flex flex-wrap gap-2">
-                  <span className="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1 rounded-lg">
-                    Week {reportData.session.week_number}
-                  </span>
-                  {reportData.session.topic && (
-                    <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-lg">
-                      {reportData.session.topic}
-                    </span>
-                  )}
-                  {reportData.session.room && (
-                    <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-lg">
-                      Room: {reportData.session.room}
-                    </span>
-                  )}
-                  {reportData.session.actual_start_time && (
-                    <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-lg">
-                      {new Date(
-                        reportData.session.actual_start_time,
-                      ).toLocaleTimeString("en-US", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false,
-                      })}
-                      {reportData.session.actual_end_time
-                        ? ` – ${new Date(
-                            reportData.session.actual_end_time,
-                          ).toLocaleTimeString("en-US", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: false,
-                          })}`
-                        : " (ongoing)"}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <MyAttendanceCard
-                record={myRecord}
-                course={reportData.course}
-                lateAfter={reportData.course?.late_after_minutes ?? 15}
-                absentAfter={reportData.course?.absent_after_minutes ?? 60}
-                sessionStartTime={reportData.session?.actual_start_time}
-              />
-
-              <div className="mt-6">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
-                  Class Summary
-                </p>
-                <div className="grid grid-cols-4 gap-4">
-                  {[
-                    {
-                      label: "Total",
-                      value: reportData.summary.total,
-                      color: "text-gray-800",
-                      bg: "bg-gray-50",
-                    },
-                    {
-                      label: "Present",
-                      value: reportData.summary.present,
-                      color: "text-emerald-600",
-                      bg: "bg-emerald-50",
-                    },
-                    {
-                      label: "Late",
-                      value: reportData.summary.late,
-                      color: "text-orange-600",
-                      bg: "bg-orange-50",
-                    },
-                    {
-                      label: "Absent",
-                      value: reportData.summary.absent,
-                      color: "text-rose-600",
-                      bg: "bg-rose-50",
-                    },
-                  ].map((s) => (
-                    <div
-                      key={s.label}
-                      className={`${s.bg} rounded-2xl p-4 text-center`}
-                    >
-                      <p className={`text-3xl font-black ${s.color}`}>
-                        {s.value}
-                      </p>
-                      <p className="text-xs font-bold text-gray-400 mt-1">
-                        {s.label}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="text-center mt-4">
                 <button
-                  onClick={() =>
-                    navigate("/student/attendance-report", {
-                      state: { courseId: selectedCourse?.id },
-                    })
-                  }
-                  className="text-blue-600 text-sm font-bold hover:underline"
+                  onClick={() => navigate("/student/register-face")}
+                  className="self-start sm:self-auto shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition"
                 >
-                  View full attendance history →
+                  Register Now <FiArrowRight size={12} />
                 </button>
               </div>
-            </div>
-          ) : selectedCourse && sessions.length === 0 ? (
-            <div className="bg-white rounded-3xl p-10 text-center text-gray-400">
-              <FiActivity size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="font-medium">
-                No sessions started for this course yet
-              </p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-3xl p-10 text-center text-gray-400">
-              <FiBook size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="font-medium">
-                {courses.length === 0
-                  ? "You haven't enrolled in any courses yet"
-                  : "Select a course to view your attendance"}
-              </p>
-              {courses.length === 0 && (
+            )}
+            {faceRegistered === true && (
+              <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 sm:px-5 py-3">
+                <FiCheckCircle
+                  className="text-emerald-500 shrink-0"
+                  size={16}
+                />
+                <p className="text-sm font-semibold text-emerald-700">
+                  Face registered — ready to check in automatically.
+                </p>
+                <button
+                  onClick={() => navigate("/student/register-face")}
+                  className="ml-auto text-xs text-slate-500 font-bold hover:underline whitespace-nowrap"
+                >
+                  Re-register
+                </button>
+              </div>
+            )}
+
+            {/* Summary cards */}
+            {courses.length > 0 && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <SummaryCard
+                  label="Enrolled"
+                  value={enrolledCount}
+                  color="blue"
+                  icon={<FiBook size={13} />}
+                  sub="Active courses"
+                />
+                <SummaryCard
+                  label="This Week"
+                  value={classesThisWeek}
+                  color="slate"
+                  icon={<FiCalendar size={13} />}
+                  sub="Total sessions"
+                />
+                <SummaryCard
+                  label="Today"
+                  value={classesToday}
+                  color={classesToday > 0 ? "emerald" : "slate"}
+                  icon={<FiClock size={13} />}
+                  sub={todayStr}
+                />
+                <SummaryCard
+                  label="At Risk"
+                  value={atRiskCount}
+                  color={atRiskCount > 0 ? "rose" : "emerald"}
+                  icon={<FiAlertTriangle size={13} />}
+                  sub={atRiskCount > 0 ? "Below criteria" : "All good ✓"}
+                />
+              </div>
+            )}
+
+            {/* No courses empty state */}
+            {courses.length === 0 && (
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 py-12">
+                <FiBook size={48} className="opacity-20" />
+                <p className="text-sm font-medium text-center">
+                  You haven't enrolled in any courses yet
+                </p>
                 <button
                   onClick={() => navigate("/student/enroll")}
-                  className="mt-4 inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg"
+                  className="mt-2 inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-200"
                 >
                   <FiPlusSquare size={14} /> Join Your First Course
                 </button>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+
+            {/* Course list */}
+            {courses.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                    <FiBarChart2 size={14} /> My Courses
+                  </p>
+                  <button
+                    onClick={() => navigate("/student/stu-attendance")}
+                    className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1"
+                  >
+                    Full report <FiArrowRight size={11} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  {courses.map((c) => {
+                    const r = reports[c.id];
+                    const me = r?.students?.find(
+                      (s) => s.student_id === studentId,
+                    );
+                    const threshold = r?.course?.attendance_threshold ?? 80;
+                    const pct = me?.attendance_pct ?? null;
+                    const totalSess = r?.total_sessions ?? 0;
+
+                    return (
+                      <div
+                        key={c.id}
+                        onClick={() =>
+                          navigate("/student/stu-attendance", {
+                            state: { courseId: c.id },
+                          })
+                        }
+                        className="rounded-2xl border border-gray-100 bg-gray-50/50 p-4 sm:p-5 cursor-pointer hover:bg-white hover:shadow-sm transition-all group"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-lg">
+                                {c.course_code}
+                              </span>
+                              <span className="text-xs text-gray-400 font-medium">
+                                Sec {c.section}
+                              </span>
+                            </div>
+                            <p className="font-bold text-gray-800 text-sm truncate pr-2">
+                              {c.name}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {c.day_of_week} ·{" "}
+                              {String(c.start_time).slice(0, 5)}–
+                              {String(c.end_time).slice(0, 5)}
+                            </p>
+                          </div>
+                          <FiChevronRight
+                            size={15}
+                            className="text-gray-300 group-hover:text-blue-500 transition shrink-0 mt-1"
+                          />
+                        </div>
+
+                        {loadingReports ? (
+                          <div className="h-8 bg-gray-100 rounded-lg animate-pulse" />
+                        ) : me ? (
+                          <>
+                            <div className="flex items-center gap-2 sm:gap-3 mb-3 text-xs font-bold flex-wrap">
+                              <span className="flex items-center gap-1 text-emerald-600">
+                                <FiCheckCircle size={11} /> {me.present} present
+                              </span>
+                              <span className="flex items-center gap-1 text-orange-500">
+                                <FiAlertCircle size={11} /> {me.late} late
+                              </span>
+                              <span className="flex items-center gap-1 text-rose-500">
+                                <FiXCircle size={11} /> {me.absent} absent
+                              </span>
+                              <span className="ml-auto text-gray-400 font-medium">
+                                {totalSess} sessions
+                              </span>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400 font-medium">
+                                  Attendance
+                                </span>
+                                <span
+                                  className={`font-bold ${pct >= threshold ? "text-emerald-600" : pct >= threshold * 0.85 ? "text-orange-500" : "text-rose-500"}`}
+                                >
+                                  {pct ?? 0}%
+                                  <span className="text-gray-300 font-normal ml-1">
+                                    / {threshold}% req
+                                  </span>
+                                </span>
+                              </div>
+                              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${pctBarColor(pct ?? 0, threshold)}`}
+                                  style={{
+                                    width: `${Math.min(pct ?? 0, 100)}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            {r?.course?.use_scoring &&
+                              me.total_score !== null && (
+                                <p className="text-xs text-gray-400 mt-2 font-medium">
+                                  Score:{" "}
+                                  <span className="text-slate-700 font-bold">
+                                    {me.total_score}
+                                  </span>
+                                  {me.max_score ? (
+                                    <span className="text-gray-300">
+                                      {" "}
+                                      / {me.max_score} pts
+                                    </span>
+                                  ) : null}
+                                </p>
+                              )}
+                          </>
+                        ) : (
+                          <p className="text-xs text-gray-400 font-medium">
+                            {totalSess === 0
+                              ? "No sessions yet"
+                              : "No attendance records"}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>
   );
 }
 
-function MyAttendanceCard({
-  record,
-  course,
-  lateAfter,
-  absentAfter,
-  sessionStartTime,
-}) {
-  const STATUS_STYLES = {
-    present: {
-      bg: "bg-emerald-50 border-emerald-200",
-      text: "text-emerald-700",
-      badge: "bg-emerald-100 text-emerald-600 border-emerald-200",
-      icon: <FiCheckCircle size={28} />,
-      label: "Present",
-    },
-    late: {
-      bg: "bg-orange-50 border-orange-200",
-      text: "text-orange-700",
-      badge: "bg-orange-100 text-orange-600 border-orange-200",
-      icon: <FiAlertCircle size={28} />,
-      label: "Late",
-    },
-    absent: {
-      bg: "bg-rose-50 border-rose-200",
-      text: "text-rose-700",
-      badge: "bg-rose-100 text-rose-600 border-rose-200",
-      icon: <FiXCircle size={28} />,
-      label: "Absent",
-    },
+function SummaryCard({ label, value, color, icon, sub }) {
+  const colors = {
+    blue: "from-blue-600 to-blue-500 shadow-blue-200",
+    slate: "from-slate-600 to-slate-500 shadow-blue-200",
+    emerald: "from-emerald-500 to-teal-400 shadow-emerald-200",
+    orange: "from-orange-400 to-amber-400 shadow-orange-200",
+    rose: "from-rose-500 to-pink-500 shadow-rose-200",
   };
-
-  if (!record) {
-    return (
-      <div className="bg-gray-50 border border-dashed border-gray-200 rounded-2xl p-6 text-center text-gray-400">
-        <FiActivity size={28} className="mx-auto mb-2 opacity-30" />
-        <p className="font-semibold text-sm">
-          No attendance record for you in this session
-        </p>
-      </div>
-    );
-  }
-
-  const style = STATUS_STYLES[record.status] || STATUS_STYLES.absent;
-
-  let elapsedMin = null;
-  if (sessionStartTime && record.timestamp) {
-    elapsedMin = Math.round(
-      (new Date(record.timestamp) - new Date(sessionStartTime)) / 60000,
-    );
-  }
-
   return (
     <div
-      className={`border rounded-2xl p-5 flex items-center justify-between gap-4 ${style.bg}`}
+      className={`rounded-2xl p-4 sm:p-5 text-white bg-gradient-to-br ${colors[color]} shadow-lg`}
     >
-      <div className="flex items-center gap-4">
-        <div className={`${style.text}`}>{style.icon}</div>
-        <div>
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">
-            My Attendance
-          </p>
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold border ${style.badge}`}
-            >
-              {style.label}
-            </span>
-            {elapsedMin !== null && (
-              <span className="text-xs text-gray-500 font-medium">
-                checked in {elapsedMin > 0 ? `+${elapsedMin} min` : "on time"}
-              </span>
-            )}
-          </div>
-        </div>
+      <div className="flex items-center gap-1.5 text-white/90 mb-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider">
+        {icon} {label}
       </div>
-
-      <div className="text-right shrink-0">
-        {record.timestamp && (
-          <p className="font-mono font-bold text-gray-700 text-lg">
-            {new Date(record.timestamp).toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            })}
-          </p>
-        )}
-        {course?.use_scoring &&
-          record.score !== null &&
-          record.score !== undefined && (
-            <p className="text-xs text-gray-400 font-bold">
-              Score: <span className="text-blue-600">{record.score} pt</span>
-            </p>
-          )}
-        <p className="text-xs text-gray-400 mt-0.5">
-          Late ≥ +{lateAfter}m · Absent ≥ +{absentAfter}m
+      <p className="text-3xl sm:text-4xl font-black">{value}</p>
+      {sub && (
+        <p className="text-white/80 text-[10px] sm:text-xs mt-1 font-medium truncate">
+          {sub}
         </p>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ icon, label, value, sub, gradient, shadow }) {
-  return (
-    <div
-      className={`relative overflow-hidden rounded-2xl p-6 text-white shadow-xl ${shadow} bg-gradient-to-br ${gradient} transition-transform hover:scale-[1.02]`}
-    >
-      <div className="flex items-center gap-2 mb-3 opacity-90">
-        <div className="p-2 bg-white/20 rounded-lg">{icon}</div>
-        <span className="font-bold text-sm uppercase tracking-wide">
-          {label}
-        </span>
-      </div>
-      <h2 className="text-5xl font-extrabold tracking-tight">{value}</h2>
-      <p className="text-white/70 text-xs mt-1 font-medium">{sub}</p>
+      )}
     </div>
   );
 }

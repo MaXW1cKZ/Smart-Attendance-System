@@ -41,3 +41,17 @@ class CourseResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class CourseUpdate(BaseModel):
+    name: str
+    day_of_week: str
+    start_time: str
+    end_time: str
+    late_after_minutes: int
+    absent_after_minutes: int
+    attendance_threshold: int
+    use_scoring: bool
+    score_present: float = 1.0
+    score_late: float = 0.5
+    score_absent: float = 0.0
