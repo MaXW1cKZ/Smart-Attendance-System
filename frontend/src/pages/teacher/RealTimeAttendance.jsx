@@ -30,6 +30,7 @@ const RealTimeAttendance = () => {
   const [statusLabel, setStatusLabel] = useState("Loading model...");
   const [faceCount, setFaceCount] = useState(0);
   const [sessionInfo, setSessionInfo] = useState(null);
+  const [courseInfo, setCourseInfo] = useState(null);
   const [isFetchingAttendance, setIsFetchingAttendance] = useState(true);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
@@ -54,8 +55,8 @@ const RealTimeAttendance = () => {
         const attRes = await api.get(`/sessions/${sessionId}/attendance`);
         const data = attRes.data;
 
-        // Store session info from response
         if (data.session) setSessionInfo(data.session);
+        if (data.course) setCourseInfo(data.course);
 
         // Restore existing logs
         const existingLogs = (data.records || [])
@@ -63,7 +64,8 @@ const RealTimeAttendance = () => {
           .map((att) => ({
             id: att.attendance_id,
             student_name: att.name,
-            student_id: att.student_id,
+            // ดึง student_id จาก email โดยตัดส่วน @... ออก ถ้าไม่มีให้ fallback ไปใช้ student_id เดิม
+            display_id: att.email ? att.email.split("@")[0] : att.student_id,
             time: att.timestamp
               ? new Date(att.timestamp).toLocaleTimeString("en-US", {
                   hour12: false,
@@ -124,13 +126,25 @@ const RealTimeAttendance = () => {
         // Only add to log if not already_recorded
         if (!res.data.already_recorded) {
           setLogs((prev) => {
-            if (prev.find((l) => l.student_id === student.student_id))
+            // Check against either display_id or DB student_id to prevent duplicates
+            const currentDisplayId = student.email
+              ? student.email.split("@")[0]
+              : student.student_id;
+            if (
+              prev.find(
+                (l) =>
+                  l.display_id === currentDisplayId ||
+                  l.student_id === student.student_id,
+              )
+            )
               return prev;
+
             return [
               {
                 id: Date.now(),
                 student_name: student.name,
-                student_id: student.student_id,
+                student_id: student.student_id, // raw ID just in case
+                display_id: currentDisplayId, // ID from email
                 time: new Date().toLocaleTimeString("en-US", { hour12: false }),
                 confidence: student.confidence
                   ? student.confidence / 100
@@ -280,9 +294,10 @@ const RealTimeAttendance = () => {
     setShowEndConfirm(false);
     setEndingSession(false);
 
+    const wk = weekNumber || sessionInfo?.week_number;
     navigate("/teacher/dashboard", {
       state: {
-        message: `Session Week ${weekNumber} ended. Absent students marked automatically.`,
+        message: `Session${wk != null ? ` Week ${wk}` : ""} ended. Absent students marked automatically.`,
       },
     });
   };
@@ -290,6 +305,15 @@ const RealTimeAttendance = () => {
   const videoConstraints = deviceId
     ? { deviceId: { exact: deviceId } }
     : { facingMode: "user" };
+
+  const displaySessionId = sessionInfo?.id ?? sessionId;
+  const displayCourseCode = courseCode || courseInfo?.course_code || "";
+  const displayCourseName = courseName || courseInfo?.name || "";
+  const displayWeek =
+    weekNumber !== "" && weekNumber != null
+      ? weekNumber
+      : sessionInfo?.week_number;
+  const displayRoom = room || sessionInfo?.room || "";
 
   return (
     <div className="flex h-screen bg-[#F3F4F6] font-sans overflow-hidden">
@@ -359,31 +383,45 @@ const RealTimeAttendance = () => {
                 />
                 Live Attendance
               </h1>
-              <p className="text-blue-100 opacity-90 pl-1 flex items-center gap-3 flex-wrap">
-                <span>Session #{sessionId}</span>
-                {(courseCode || courseName) && (
-                  <>
-                    <span className="opacity-40">·</span>
+              <div className="text-blue-100 pl-1 mt-2 space-y-1.5 max-w-3xl">
+                {/* ย้าย Week ขึ้นมาด้านบน และแสดง Fallback กรณีไม่มี Week */}
+                <p className="text-white text-lg font-bold tracking-tight">
+                  {displayWeek != null && displayWeek !== ""
+                    ? `Week ${displayWeek}`
+                    : "Live Session"}
+                </p>
+                <p className="text-sm text-blue-100/95 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {(displayCourseCode || displayCourseName) && (
                     <span className="font-semibold">
-                      {courseCode} {courseName && `— ${courseName}`}
+                      {displayCourseCode && (
+                        <span className="text-white">{displayCourseCode}</span>
+                      )}
+                      {displayCourseCode && displayCourseName && (
+                        <span className="text-blue-200/90"> — </span>
+                      )}
+                      {displayCourseName && <span>{displayCourseName}</span>}
                     </span>
-                  </>
-                )}
-                {weekNumber && (
-                  <>
-                    <span className="opacity-40">·</span>
-                    <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs font-bold">
-                      Week {weekNumber}
+                  )}
+
+                  {/* แสดง Session เป็นป้ายสลับกับที่ Week เคยอยู่ */}
+                  {(displayCourseCode || displayCourseName) && (
+                    <span className="text-blue-300/80 hidden sm:inline">·</span>
+                  )}
+                  {displayRoom && (
+                    <span className="text-sm">
+                      <span className="text-blue-200/80">Room </span>
+                      <span className="font-bold text-white">
+                        {displayRoom}
+                      </span>
                     </span>
-                  </>
-                )}
-                {room && (
-                  <>
-                    <span className="opacity-40">·</span>
-                    <span>Room {room}</span>
-                  </>
-                )}
-              </p>
+                  )}
+                </p>
+                {!displayCourseCode &&
+                  !displayCourseName &&
+                  isFetchingAttendance && (
+                    <p className="text-xs text-blue-200/70">Loading session…</p>
+                  )}
+              </div>
             </div>
 
             {isSessionActive ? (
@@ -526,8 +564,9 @@ const RealTimeAttendance = () => {
                         <p className="font-bold text-sm text-gray-800 truncate">
                           {log.student_name}
                         </p>
+                        {/* ใช้ display_id ที่สกัดรหัสจาก Email แล้ว */}
                         <p className="text-xs text-gray-400 font-mono">
-                          {log.student_id}
+                          {log.display_id}
                         </p>
                       </div>
                       <div className="text-right flex-shrink-0">
@@ -546,9 +585,10 @@ const RealTimeAttendance = () => {
                             <FiClock size={10} /> Late
                           </span>
                         )}
+                        {/* เพิ่มคำว่า Acc : นำหน้าเปอร์เซ็นต์ */}
                         {log.confidence && (
-                          <p className="text-xs text-gray-300 mt-0.5">
-                            {Math.round(log.confidence * 100)}%
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            Acc : {Math.round(log.confidence * 100)}%
                           </p>
                         )}
                       </div>

@@ -14,7 +14,7 @@ import {
   FiFileText,
 } from "react-icons/fi";
 
-const ROOMS = ["M22", "CB2301", "LX1102", "SIT-Train-1", "Online"];
+const ROOMS = [];
 
 const DeviceSetup = () => {
   const navigate = useNavigate();
@@ -26,7 +26,7 @@ const DeviceSetup = () => {
   const [devices, setDevices] = useState([]);
 
   const [selectedCourse, setSelectedCourse] = useState(null);
-  const [selectedRoom, setSelectedRoom] = useState("M22");
+  const [selectedRoom, setSelectedRoom] = useState("");
   const [selectedDevice, setSelectedDevice] = useState("");
   const [topic, setTopic] = useState("");
 
@@ -60,6 +60,10 @@ const DeviceSetup = () => {
   const handleStartClass = async () => {
     if (!selectedCourse) {
       setError("Please select a course first");
+      return;
+    }
+    if (!selectedRoom.trim()) {
+      setError("Please specify a classroom");
       return;
     }
     setLoading(true);
@@ -130,93 +134,114 @@ const DeviceSetup = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
             {/* Course */}
-            <div className="relative group">
-              <SelectionCard
-                label="Course"
-                value={
-                  selectedCourse ? selectedCourse.course_code : "Select Course"
-                }
-                subValue={
-                  selectedCourse
-                    ? selectedCourse.name
-                    : "Please select a course"
-                }
-                icon={<FiBook size={22} />}
-                color="text-blue-600"
-                bgColor="bg-blue-50"
-              />
-              <select
-                className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer"
-                onChange={(e) => {
-                  const c = courses.find(
-                    (x) => x.id === parseInt(e.target.value),
-                  );
-                  setSelectedCourse(c || null);
-                }}
-                value={selectedCourse?.id || ""}
-              >
-                <option value="" disabled>
-                  Select course
-                </option>
-                {courses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.course_code} — {c.name}
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 flex flex-col justify-center gap-2">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <FiBook size={22} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    Course
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Please select a course
+                  </p>
+                </div>
+              </div>
+              <div className="relative flex items-center">
+                <select
+                  className="w-full px-4 py-3 bg-gray-50 rounded-xl text-sm font-medium text-gray-700 border border-transparent focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition appearance-none pr-10 cursor-pointer"
+                  onChange={(e) => {
+                    const c = courses.find(
+                      (x) => x.id === parseInt(e.target.value),
+                    );
+                    setSelectedCourse(c || null);
+                  }}
+                  value={selectedCourse?.id || ""}
+                >
+                  <option value="" disabled>
+                    Select course
                   </option>
-                ))}
-              </select>
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.course_code} — {c.name}
+                    </option>
+                  ))}
+                </select>
+                <FiChevronDown
+                  className="absolute right-4 text-gray-400 pointer-events-none"
+                  size={20}
+                />
+              </div>
             </div>
 
             {/* Room */}
-            <div className="relative group">
-              <SelectionCard
-                label="Classroom"
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 flex flex-col justify-center gap-2">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-12 h-12 rounded-2xl bg-pink-50 text-pink-600 flex items-center justify-center">
+                  <FiMapPin size={22} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    Classroom
+                  </p>
+                  <p className="text-sm text-gray-500">Type or select a room</p>
+                </div>
+              </div>
+              <input
+                type="text"
+                list="room-options"
+                placeholder="Enter the room number"
                 value={selectedRoom}
-                subValue="Select the room for today"
-                icon={<FiMapPin size={22} />}
-                color="text-pink-600"
-                bgColor="bg-pink-50"
-              />
-              <select
-                className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer"
                 onChange={(e) => setSelectedRoom(e.target.value)}
-                value={selectedRoom}
-              >
+                className="w-full px-4 py-3 bg-gray-50 rounded-xl text-sm font-medium text-gray-700 border border-transparent focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none transition"
+              />
+              <datalist id="room-options">
                 {ROOMS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
+                  <option key={r} value={r} />
                 ))}
-              </select>
+              </datalist>
             </div>
 
             {/* Camera */}
-            <div className="relative group">
-              <SelectionCard
-                label="Camera"
-                value={
-                  devices.find((d) => d.deviceId === selectedDevice)?.label ||
-                  "Default Camera"
-                }
-                subValue={
-                  devices.length > 0
-                    ? `${devices.length} camera(s) found`
-                    : "No camera found"
-                }
-                icon={<FiMonitor size={22} />}
-                color="text-orange-600"
-                bgColor="bg-orange-50"
-              />
-              <select
-                className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer"
-                onChange={(e) => setSelectedDevice(e.target.value)}
-                value={selectedDevice}
-              >
-                {devices.map((d, i) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `Camera ${i + 1}`}
-                  </option>
-                ))}
-              </select>
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 flex flex-col justify-center gap-2">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-12 h-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center">
+                  <FiMonitor size={22} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    Camera
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {devices.length > 0
+                      ? `${devices.length} camera(s) found`
+                      : "No camera found"}
+                  </p>
+                </div>
+              </div>
+              <div className="relative flex items-center">
+                <select
+                  className="w-full px-4 py-3 bg-gray-50 rounded-xl text-sm font-medium text-gray-700 border border-transparent focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none transition appearance-none pr-10 cursor-pointer"
+                  onChange={(e) => setSelectedDevice(e.target.value)}
+                  value={selectedDevice}
+                >
+                  {devices.length === 0 && (
+                    <option value="" disabled>
+                      No camera found
+                    </option>
+                  )}
+                  {devices.map((d, i) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `Camera ${i + 1}`}
+                    </option>
+                  ))}
+                </select>
+                <FiChevronDown
+                  className="absolute right-4 text-gray-400 pointer-events-none"
+                  size={20}
+                />
+              </div>
             </div>
 
             {/* Topic */}
@@ -236,7 +261,7 @@ const DeviceSetup = () => {
               </div>
               <input
                 type="text"
-                placeholder="..."
+                placeholder="Enter the topic [Optional]"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
                 className="w-full px-4 py-3 bg-gray-50 rounded-xl text-sm font-medium text-gray-700 border border-transparent focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 outline-none transition"
@@ -257,7 +282,7 @@ const DeviceSetup = () => {
                 <FiPlay fill="currentColor" size={20} />
               )}
             </div>
-            {loading ? "Starting Class..." : "START ATTENDANCE"}
+            {loading ? "Starting Class..." : "START SESSION"}
           </button>
 
           {selectedCourse && (
@@ -273,26 +298,5 @@ const DeviceSetup = () => {
     </div>
   );
 };
-
-const SelectionCard = ({ label, value, subValue, icon, color, bgColor }) => (
-  <div className="relative p-6 rounded-3xl border border-gray-100 bg-white shadow-sm flex items-center gap-4 group hover:border-gray-200 transition-all cursor-pointer">
-    <div
-      className={`w-14 h-14 rounded-2xl ${bgColor} ${color} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}
-    >
-      {icon}
-    </div>
-    <div className="flex-1 min-w-0">
-      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-0.5">
-        {label}
-      </p>
-      <p className="font-bold text-gray-800 text-lg truncate">{value}</p>
-      <p className="text-sm text-gray-500 truncate">{subValue}</p>
-    </div>
-    <FiChevronDown
-      className="text-gray-300 group-hover:text-gray-500 transition-colors shrink-0"
-      size={22}
-    />
-  </div>
-);
 
 export default DeviceSetup;
