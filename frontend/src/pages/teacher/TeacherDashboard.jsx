@@ -11,6 +11,8 @@ import {
   FiBarChart2,
   FiPlay,
   FiTrendingUp,
+  FiUsers,
+  FiXCircle,
 } from "react-icons/fi";
 
 export default function TeacherDashboard() {
@@ -19,19 +21,19 @@ export default function TeacherDashboard() {
   const successMsg = location.state?.message || null;
 
   const [courses, setCourses] = useState([]);
-  const [sessions, setSessions] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
-  const [selectedSession, setSelectedSession] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [loadingReport, setLoadingReport] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  const [thisWeekSessions, setThisWeekSessions] = useState(0);
+  const [thisWeekCourses, setThisWeekCourses] = useState(0);
 
   useEffect(() => {
     const t = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Load courses on mount
   useEffect(() => {
     api
       .get("/courses/my-courses")
@@ -39,56 +41,79 @@ export default function TeacherDashboard() {
       .catch(console.error);
   }, []);
 
-  // Load sessions when course selected
   useEffect(() => {
-    if (!selectedCourse) return;
-    setSessions([]);
-    setSelectedSession(null);
-    setReportData(null);
-    api
-      .get(`/courses/${selectedCourse.id}/sessions`)
-      .then((r) => {
-        setSessions(r.data);
-        // Auto-select the latest session
-        if (r.data.length > 0) {
-          const latest = r.data.reduce((a, b) =>
-            a.week_number > b.week_number ? a : b,
-          );
-          setSelectedSession(latest);
-        }
-      })
-      .catch(console.error);
-  }, [selectedCourse]);
+    if (courses.length === 0) return;
+    const fetchThisWeekStats = async () => {
+      try {
+        const res = await Promise.all(
+          courses.map((c) => api.get(`/courses/${c.id}/sessions`)),
+        );
+        let sCount = 0;
+        const cSet = new Set();
 
-  // Load attendance report when session selected
-  // Fetch for any session that has been started (actual_start_time set OR is_active)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        res.forEach((r, idx) => {
+          r.data.forEach((session) => {
+            if (session.actual_start_time) {
+              const sDate = new Date(session.actual_start_time);
+              if (sDate >= sevenDaysAgo) {
+                sCount++;
+                cSet.add(courses[idx].id);
+              }
+            }
+          });
+        });
+
+        setThisWeekSessions(sCount);
+        setThisWeekCourses(cSet.size);
+      } catch (err) {
+        console.error("Failed to fetch weekly stats", err);
+      }
+    };
+    fetchThisWeekStats();
+  }, [courses]);
+
   useEffect(() => {
-    if (!selectedSession) return;
-    if (!selectedSession.actual_start_time && !selectedSession.is_active) {
+    if (!selectedCourse) {
       setReportData(null);
       return;
     }
     setLoadingReport(true);
     setReportData(null);
     api
-      .get(`/sessions/${selectedSession.id}/attendance`)
+      .get(`/courses/${selectedCourse.id}/overall-report`)
       .then((r) => setReportData(r.data))
       .catch(console.error)
       .finally(() => setLoadingReport(false));
-  }, [selectedSession]);
+  }, [selectedCourse]);
 
-  const summary = reportData?.summary;
-  const attendancePct = summary
-    ? Math.round(
-        ((summary.present + summary.late) / (summary.total || 1)) * 100,
-      )
-    : null;
+  let courseAttendancePct = null;
+  let totalStudents = 0;
+  let totalP = 0,
+    totalL = 0,
+    totalA = 0;
+
+  if (reportData && reportData.records) {
+    totalStudents = reportData.records.length;
+    reportData.records.forEach((r) => {
+      totalP += r.present || 0;
+      totalL += r.late || 0;
+      totalA += r.absent || 0;
+    });
+    const totalClasses = totalP + totalL + totalA;
+    if (totalClasses > 0) {
+      courseAttendancePct = Math.round(
+        ((totalP + totalL) / totalClasses) * 100,
+      );
+    }
+  }
 
   return (
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        {/* Header */}
         <div className="bg-gradient-to-r from-blue-700 to-slate-800 h-64 relative px-10 pt-10">
           <div className="flex justify-between items-start">
             <div>
@@ -113,7 +138,6 @@ export default function TeacherDashboard() {
           )}
         </div>
 
-        {/* Stats Cards */}
         <div className="px-10 -mt-24 relative z-10 grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
           <StatCard
             icon={<FiBook />}
@@ -125,22 +149,20 @@ export default function TeacherDashboard() {
           />
           <StatCard
             icon={<FiActivity />}
-            label="Sessions Taught"
-            value={sessions.filter((s) => s.actual_end_time).length || "—"}
-            sub={
-              selectedCourse ? selectedCourse.name : "Select a course to view"
-            }
+            label="Sessions This Week"
+            value={thisWeekSessions}
+            sub={`across ${thisWeekCourses} course(s)`}
             gradient="from-emerald-500 to-teal-400"
             shadow="shadow-emerald-200"
           />
           <StatCard
             icon={<FiTrendingUp />}
-            label="Attendance Rate"
-            value={attendancePct !== null ? `${attendancePct}%` : "—"}
+            label="Course Attendance"
+            value={
+              courseAttendancePct !== null ? `${courseAttendancePct}%` : "—"
+            }
             sub={
-              selectedSession
-                ? `Week ${selectedSession.week_number}`
-                : "Select a session to view"
+              selectedCourse ? selectedCourse.name : "Select a course to view"
             }
             gradient="from-amber-400 to-orange-400"
             shadow="shadow-orange-200"
@@ -148,213 +170,128 @@ export default function TeacherDashboard() {
         </div>
 
         <div className="px-10 pb-10 space-y-6">
-          {/* Course + Session Selector */}
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2">
-              <FiBarChart2 className="text-blue-500" /> View Attendance Report
+              <FiBarChart2 className="text-blue-500" /> Overall Attendance
+              Report
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
-                  Course
-                </label>
-                <div className="relative">
-                  <select
-                    className="w-full appearance-none bg-blue-50 text-blue-900 font-bold pl-4 pr-10 py-3 rounded-xl border border-blue-100 focus:outline-none cursor-pointer"
-                    value={selectedCourse?.id || ""}
-                    onChange={(e) => {
-                      const c = courses.find(
-                        (x) => x.id === parseInt(e.target.value),
-                      );
-                      setSelectedCourse(c || null);
-                    }}
-                  >
-                    <option value="">— Select Course —</option>
-                    {courses.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.course_code}: {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <FiChevronDown className="absolute right-3 top-3.5 text-blue-500 pointer-events-none" />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
-                  Session
-                </label>
-                <div className="relative">
-                  <select
-                    className="w-full appearance-none bg-gray-50 text-gray-700 font-bold pl-4 pr-10 py-3 rounded-xl border border-gray-200 focus:outline-none cursor-pointer disabled:opacity-50"
-                    value={selectedSession?.id || ""}
-                    disabled={!selectedCourse || sessions.length === 0}
-                    onChange={(e) => {
-                      const s = sessions.find(
-                        (x) => x.id === parseInt(e.target.value),
-                      );
-                      setSelectedSession(s || null);
-                    }}
-                  >
-                    <option value="">— Select Session —</option>
-                    {sessions.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        Week {s.week_number}
-                        {s.date
-                          ? ` · ${new Date(
-                              s.date + "T12:00",
-                            ).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                            })}`
-                          : ""}
-                        {s.is_active ? " 🔴 Live" : s.actual_end_time ? "" : ""}
-                        {s.topic ? ` · ${s.topic}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <FiChevronDown className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
-                </div>
+            <div className="max-w-md">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                Select Course
+              </label>
+              <div className="relative">
+                <select
+                  className="w-full appearance-none bg-blue-50 text-blue-900 font-bold pl-4 pr-10 py-3 rounded-xl border border-blue-100 focus:outline-none cursor-pointer text-sm"
+                  value={selectedCourse?.id || ""}
+                  onChange={(e) => {
+                    const c = courses.find(
+                      (x) => x.id === parseInt(e.target.value),
+                    );
+                    setSelectedCourse(c || null);
+                  }}
+                >
+                  <option value="">— Select Course —</option>
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.course_code}: {c.name}
+                    </option>
+                  ))}
+                </select>
+                <FiChevronDown className="absolute right-3 top-3.5 text-blue-500 pointer-events-none" />
               </div>
             </div>
           </div>
 
-          {/* Content area */}
           {loadingReport ? (
             <div className="bg-white rounded-3xl p-10 text-center text-gray-400 font-medium">
-              Loading attendance data...
+              Loading overall attendance data...
             </div>
           ) : reportData ? (
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
-              {/* Session meta info */}
-              {reportData.session && (
-                <div className="mb-5 flex flex-wrap gap-2">
-                  <span className="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1 rounded-lg">
-                    Week {reportData.session.week_number}
-                  </span>
-                  {reportData.session.topic && (
-                    <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-lg">
-                      {reportData.session.topic}
-                    </span>
-                  )}
-                  {reportData.session.room && (
-                    <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-lg">
-                      Room: {reportData.session.room}
-                    </span>
-                  )}
-                  {reportData.session.actual_start_time && (
-                    <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-lg">
-                      {new Date(
-                        reportData.session.actual_start_time,
-                      ).toLocaleTimeString("en-US", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false,
-                      })}
-                      {reportData.session.actual_end_time
-                        ? ` – ${new Date(
-                            reportData.session.actual_end_time,
-                          ).toLocaleTimeString("en-US", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: false,
-                          })}`
-                        : " (ongoing)"}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Summary counts */}
-              <div className="grid grid-cols-4 gap-4 mb-6">
-                {[
-                  {
-                    label: "Total",
-                    value: summary.total,
-                    color: "text-gray-800",
-                    bg: "bg-gray-50",
-                  },
-                  {
-                    label: "Present",
-                    value: summary.present,
-                    color: "text-emerald-600",
-                    bg: "bg-emerald-50",
-                  },
-                  {
-                    label: "Late",
-                    value: summary.late,
-                    color: "text-orange-600",
-                    bg: "bg-orange-50",
-                  },
-                  {
-                    label: "Absent",
-                    value: summary.absent,
-                    color: "text-rose-600",
-                    bg: "bg-rose-50",
-                  },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    className={`${s.bg} rounded-2xl p-4 text-center`}
-                  >
-                    <p className={`text-3xl font-black ${s.color}`}>
-                      {s.value}
-                    </p>
-                    <p className="text-xs font-bold text-gray-400 mt-1">
-                      {s.label}
-                    </p>
-                  </div>
-                ))}
+              {/* ✅ แทนที่บล็อกสีเรียบๆ ด้วย SummaryCard จากหน้า Report */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <SummaryCard
+                  label="Enrolled Students"
+                  value={totalStudents}
+                  color="blue"
+                  icon={<FiUsers size={14} />}
+                />
+                <SummaryCard
+                  label="Total Present"
+                  value={totalP}
+                  color="emerald"
+                  icon={<FiCheckCircle size={14} />}
+                />
+                <SummaryCard
+                  label="Total Late"
+                  value={totalL}
+                  color="orange"
+                  icon={<FiClock size={14} />}
+                />
+                <SummaryCard
+                  label="Total Absent"
+                  value={totalA}
+                  color="rose"
+                  icon={<FiXCircle size={14} />}
+                />
               </div>
 
-              {/* Preview table */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
                       <th className="pb-3 pl-4">#</th>
+                      <th className="pb-3">Student ID</th>
                       <th className="pb-3">Name</th>
-                      <th className="pb-3 text-center">Check-in Time</th>
-                      <th className="pb-3 text-center">Score</th>
-                      <th className="pb-3 text-center">Status</th>
+                      <th className="pb-3 text-center">Present</th>
+                      <th className="pb-3 text-center">Late</th>
+                      <th className="pb-3 text-center">Absent</th>
+                      <th className="pb-3 text-center">Total Score</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {reportData.records.slice(0, 8).map((r, i) => (
-                      <tr
-                        key={r.attendance_id}
-                        className="border-b border-gray-50 hover:bg-gray-50 transition h-14"
-                      >
-                        <td className="pl-4 text-gray-400 text-xs">{i + 1}</td>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold shrink-0">
-                              {r.name?.charAt(0) || "?"}
+                    {reportData.records.slice(0, 8).map((r, i) => {
+                      const realStudentId = r.email
+                        ? r.email.split("@")[0]
+                        : String(r.student_id);
+                      return (
+                        <tr
+                          key={r.student_id || i}
+                          className="border-b border-gray-50 hover:bg-gray-50 transition h-14"
+                        >
+                          <td className="pl-4 text-gray-400 text-xs">
+                            {i + 1}
+                          </td>
+                          <td className="font-bold text-gray-700">
+                            {realStudentId}
+                          </td>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold shrink-0">
+                                {r.name?.charAt(0) || "?"}
+                              </div>
+                              <span className="font-semibold text-gray-800">
+                                {r.name}
+                              </span>
                             </div>
-                            <span className="font-semibold text-gray-800">
-                              {r.name}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="text-center text-xs text-gray-500">
-                          {r.timestamp
-                            ? new Date(r.timestamp).toLocaleTimeString(
-                                "en-US",
-                                {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  hour12: false,
-                                },
-                              )
-                            : "—"}
-                        </td>
-                        <td className="text-center font-bold text-gray-700">
-                          {r.score}
-                        </td>
-                        <td className="text-center">
-                          <StatusBadge status={r.status} />
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="text-center font-bold text-emerald-600">
+                            {r.present}
+                          </td>
+                          <td className="text-center font-bold text-orange-500">
+                            {r.late}
+                          </td>
+                          <td className="text-center font-bold text-rose-500">
+                            {r.absent}
+                          </td>
+                          <td className="text-center font-bold text-gray-700">
+                            {r.total_score == null
+                              ? "—"
+                              : Number(r.total_score).toFixed(1)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -369,32 +306,11 @@ export default function TeacherDashboard() {
                 </div>
               )}
             </div>
-          ) : selectedSession &&
-            !selectedSession.actual_start_time &&
-            !selectedSession.is_active ? (
-            <div className="bg-white rounded-3xl p-10 text-center text-gray-400">
-              <FiActivity size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="font-medium">This session has not started yet</p>
-              <p className="text-sm mt-1 text-gray-300">
-                No attendance data available
-              </p>
-            </div>
-          ) : selectedCourse && sessions.length === 0 ? (
-            <div className="bg-white rounded-3xl p-10 text-center text-gray-400">
-              <FiActivity size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="font-medium">No sessions for this course yet</p>
-              <button
-                onClick={() => navigate("/teacher/device-setup")}
-                className="mt-4 flex items-center gap-2 mx-auto px-6 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg"
-              >
-                <FiPlay size={14} /> Start Teaching Now
-              </button>
-            </div>
           ) : (
             <div className="bg-white rounded-3xl p-10 text-center text-gray-400">
               <FiBook size={40} className="mx-auto mb-3 opacity-20" />
               <p className="font-medium">
-                Select a course to view attendance overview
+                Select a course to view overall attendance
               </p>
             </div>
           )}
@@ -404,6 +320,7 @@ export default function TeacherDashboard() {
   );
 }
 
+// 📌 Card ด้านบน Dashboard
 function StatCard({ icon, label, value, sub, gradient, shadow }) {
   return (
     <div
@@ -421,18 +338,22 @@ function StatCard({ icon, label, value, sub, gradient, shadow }) {
   );
 }
 
-function StatusBadge({ status }) {
-  const map = {
-    present: "bg-emerald-100 text-emerald-600 border-emerald-200",
-    late: "bg-orange-100 text-orange-600 border-orange-200",
-    absent: "bg-rose-100 text-rose-600 border-rose-200",
+// 📌 ดึง Component SummaryCard จากหน้า AttendanceReport มาใช้งานตรงนี้
+function SummaryCard({ label, value, color, icon }) {
+  const colors = {
+    blue: "from-blue-600 to-blue-500 shadow-blue-200",
+    emerald: "from-emerald-500 to-teal-400 shadow-emerald-200",
+    orange: "from-orange-400 to-amber-400 shadow-orange-200",
+    rose: "from-rose-500 to-pink-500 shadow-rose-200",
   };
-  const labels = { present: "Present", late: "Late", absent: "Absent" };
   return (
-    <span
-      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${map[status] || "bg-gray-100 text-gray-500 border-gray-200"}`}
+    <div
+      className={`rounded-2xl p-5 text-white bg-gradient-to-br ${colors[color]} shadow-lg`}
     >
-      {labels[status] || status}
-    </span>
+      <div className="flex items-center gap-2 text-white/80 mb-2 text-xs font-bold uppercase tracking-wider">
+        {icon} {label}
+      </div>
+      <p className="text-4xl font-black">{value}</p>
+    </div>
   );
 }

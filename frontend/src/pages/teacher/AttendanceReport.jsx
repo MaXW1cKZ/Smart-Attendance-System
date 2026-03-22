@@ -26,7 +26,6 @@ const STATUS_COLORS = {
 
 const PAGE_SIZE = 10;
 
-// ยก Component StatusBadge จาก TeacherDashboard มาใช้เป๊ะๆ
 function StatusBadge({ status }) {
   const map = {
     present: "bg-emerald-100 text-emerald-600 border-emerald-200",
@@ -255,7 +254,22 @@ export default function AttendanceReport() {
     URL.revokeObjectURL(url);
   };
 
+  // ✅ คำนวณ Overall Summary ให้แสดงผลเป็น StatCard
+  const overallSummary = useMemo(() => {
+    if (!isOverallView || !reportData?.records) return null;
+    let present = 0,
+      late = 0,
+      absent = 0;
+    reportData.records.forEach((r) => {
+      present += r.present || 0;
+      late += r.late || 0;
+      absent += r.absent || 0;
+    });
+    return { total: reportData.records.length, present, late, absent };
+  }, [isOverallView, reportData]);
+
   const summary = reportData?.summary;
+  const currentSummary = isOverallView ? overallSummary : summary;
 
   return (
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
@@ -368,29 +382,30 @@ export default function AttendanceReport() {
               </div>
             )}
 
-            {summary && !isOverallView && (
+            {/* ✅ แสดง SummaryCard เสมอ ไม่ว่าจะเป็น Overall หรือ Session ย่อย */}
+            {currentSummary && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <SummaryCard
-                  label="Total Students"
-                  value={summary.total}
+                  label={isOverallView ? "Enrolled Students" : "Total Students"}
+                  value={currentSummary.total}
                   color="blue"
                   icon={<FiUsers size={14} />}
                 />
                 <SummaryCard
-                  label="Present"
-                  value={summary.present}
+                  label={isOverallView ? "Total Present" : "Present"}
+                  value={currentSummary.present}
                   color="emerald"
                   icon={<FiCheckCircle size={14} />}
                 />
                 <SummaryCard
-                  label="Late"
-                  value={summary.late}
+                  label={isOverallView ? "Total Late" : "Late"}
+                  value={currentSummary.late}
                   color="orange"
                   icon={<FiClock size={14} />}
                 />
                 <SummaryCard
-                  label="Absent"
-                  value={summary.absent}
+                  label={isOverallView ? "Total Absent" : "Absent"}
+                  value={currentSummary.absent}
                   color="rose"
                   icon={<FiXCircle size={14} />}
                 />
@@ -483,7 +498,6 @@ export default function AttendanceReport() {
               </div>
             ) : (
               <>
-                {/* 📌 ใช้ CSS ตารางเป๊ะๆ จาก TeacherDashboard เลยครับ 📌 */}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
