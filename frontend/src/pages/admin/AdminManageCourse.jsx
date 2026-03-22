@@ -214,6 +214,7 @@ function SettingsTab({ course, onSaved, onDeleted }) {
     end_time: course.end_time?.substring(0, 5) || "12:00",
     late_after_minutes: course.late_after_minutes ?? 15,
     absent_after_minutes: course.absent_after_minutes ?? 60,
+    use_late_absent: course.use_late_absent ?? true,
     use_scoring: course.use_scoring ?? true,
     score_present: course.score_present ?? 1.0,
     score_late: course.score_late ?? 0.5,
@@ -226,13 +227,24 @@ function SettingsTab({ course, onSaved, onDeleted }) {
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const isTimingValid =
+    !form.use_late_absent ||
     (form.absent_after_minutes || 0) > (form.late_after_minutes || 0);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch(`/admin/courses/${course.id}`, form);
-      onSaved((prev) => ({ ...prev, ...form }));
+      const payload = {
+        ...form,
+        // ปิด use_late_absent → 9999 = ไม่มีใครโดน lock ออกหรือ Late ตลอด session
+        late_after_minutes: form.use_late_absent
+          ? form.late_after_minutes
+          : 9999,
+        absent_after_minutes: form.use_late_absent
+          ? form.absent_after_minutes
+          : 9999,
+      };
+      await api.patch(`/admin/courses/${course.id}`, payload);
+      onSaved((prev) => ({ ...prev, ...payload }));
       setSaveConfirm(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -329,76 +341,121 @@ function SettingsTab({ course, onSaved, onDeleted }) {
       </div>
 
       <div>
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
-          Attendance Timing
-        </p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+            Attendance Timing
+          </p>
+          {/* Toggle use_late_absent */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <span className="text-xs font-bold text-gray-500">
+              {form.use_late_absent ? "Late & Absent" : "Present / Absent only"}
+            </span>
+            <div
+              onClick={() => set("use_late_absent", !form.use_late_absent)}
+              className={`w-11 h-6 rounded-full transition-all relative cursor-pointer ${
+                form.use_late_absent ? "bg-teal-500" : "bg-gray-200"
+              }`}
+            >
+              <div
+                className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${
+                  form.use_late_absent ? "left-5" : "left-0.5"
+                }`}
+              />
+            </div>
+          </label>
+        </div>
         <p className="text-xs text-gray-400 mb-4">
           Counted from the moment <strong>Start Session</strong> is pressed
         </p>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
-            <label className="field-label text-orange-600">
-              Late After (minutes)
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="180"
-              className="field-input text-center font-black text-lg"
-              value={form.late_after_minutes}
-              onChange={(e) =>
-                set("late_after_minutes", parseInt(e.target.value) || 1)
-              }
-            />
-            <p className="text-xs text-orange-400 mt-1 font-medium">
-              After this → Late
-            </p>
-          </div>
-          <div className="bg-rose-50 rounded-xl p-4 border border-rose-100">
-            <label className="field-label text-rose-600">
-              Absent After (minutes)
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="300"
-              className={`field-input text-center font-black text-lg ${!isTimingValid ? "border-rose-400" : ""}`}
-              value={form.absent_after_minutes}
-              onChange={(e) =>
-                set("absent_after_minutes", parseInt(e.target.value) || 1)
-              }
-            />
-            <p className="text-xs text-rose-400 mt-1 font-medium">
-              After this → locked out
-            </p>
-          </div>
-        </div>
-        {!isTimingValid && (
-          <div className="mt-2 flex items-center gap-2 text-rose-600 text-xs font-semibold bg-rose-50 border border-rose-200 px-3 py-2 rounded-xl">
-            <FiAlertCircle size={13} /> Absent threshold must be greater than
-            Late threshold
-          </div>
-        )}
-        {isTimingValid && (
-          <div className="mt-3">
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden flex">
-              <div
-                className="bg-emerald-400 h-full transition-all"
-                style={{
-                  width: `${(form.late_after_minutes / form.absent_after_minutes) * 100}%`,
-                }}
-              />
-              <div className="bg-orange-400 h-full flex-1" />
+
+        {form.use_late_absent ? (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
+                <label className="field-label text-orange-600">
+                  Late After (minutes)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="180"
+                  className="field-input text-center font-black text-lg"
+                  value={form.late_after_minutes}
+                  onChange={(e) =>
+                    set("late_after_minutes", parseInt(e.target.value) || 1)
+                  }
+                />
+                <p className="text-xs text-orange-400 mt-1 font-medium">
+                  After this → Late
+                </p>
+              </div>
+              <div className="bg-rose-50 rounded-xl p-4 border border-rose-100">
+                <label className="field-label text-rose-600">
+                  Absent After (minutes)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="300"
+                  className={`field-input text-center font-black text-lg ${
+                    !isTimingValid ? "border-rose-400" : ""
+                  }`}
+                  value={form.absent_after_minutes}
+                  onChange={(e) =>
+                    set("absent_after_minutes", parseInt(e.target.value) || 1)
+                  }
+                />
+                <p className="text-xs text-rose-400 mt-1 font-medium">
+                  After this → locked out
+                </p>
+              </div>
             </div>
-            <div className="flex justify-between text-xs mt-1 font-medium">
-              <span className="text-emerald-600 font-bold">▶ Start</span>
-              <span className="text-orange-500 font-bold">
-                +{form.late_after_minutes}m Late
-              </span>
-              <span className="text-rose-500 font-bold">
-                +{form.absent_after_minutes}m Absent
+            {!isTimingValid && (
+              <div className="mt-2 flex items-center gap-2 text-rose-600 text-xs font-semibold bg-rose-50 border border-rose-200 px-3 py-2 rounded-xl">
+                <FiAlertCircle size={13} /> Absent threshold must be greater
+                than Late threshold
+              </div>
+            )}
+            {isTimingValid && (
+              <div className="mt-3">
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden flex">
+                  <div
+                    className="bg-emerald-400 h-full transition-all"
+                    style={{
+                      width: `${
+                        (form.late_after_minutes / form.absent_after_minutes) *
+                        100
+                      }%`,
+                    }}
+                  />
+                  <div className="bg-orange-400 h-full flex-1" />
+                </div>
+                <div className="flex justify-between text-xs mt-1 font-medium">
+                  <span className="text-emerald-600 font-bold">▶ Start</span>
+                  <span className="text-orange-500 font-bold">
+                    +{form.late_after_minutes}m Late
+                  </span>
+                  <span className="text-rose-500 font-bold">
+                    +{form.absent_after_minutes}m Absent
+                  </span>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="bg-white- rounded-2xl p-5 border border-gray-100">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-3 h-3 rounded-full bg-emerald-400" />
+              <span className="text-sm font-bold text-emerald-700">
+                Present / Absent only
               </span>
             </div>
+            <p className="text-xs text-emerald-600 leading-relaxed">
+              Students can check in anytime = <strong>Present</strong>
+              <br />
+              Students who do not check in before the teacher presses{" "}
+              <strong>End Session</strong> = <strong>Absent</strong>
+            </p>
           </div>
         )}
       </div>
@@ -492,7 +549,10 @@ function SettingsTab({ course, onSaved, onDeleted }) {
           </div>
         ) : (
           <div className="bg-gray-50 rounded-xl p-4 text-sm text-gray-400 font-medium text-center">
-            Scoring disabled — attendance tracked as Present / Late / Absent
+            Scoring disabled — attendance tracked as{" "}
+            {form.use_late_absent
+              ? "Present / Late / Absent"
+              : "Present / Absent"}{" "}
             only
           </div>
         )}

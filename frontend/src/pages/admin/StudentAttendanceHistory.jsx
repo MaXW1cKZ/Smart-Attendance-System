@@ -142,7 +142,7 @@ export default function StudentAttendanceHistory() {
     api
       .get(`/courses/${selectedCourse.id}/sessions`)
       .then(async (r) => {
-        const ended = r.data.filter((s) => s.actual_end_time || s.is_active);
+        const ended = r.data; // แสดง session ทั้งหมด (ทั้งที่จบแล้วและ active)
         const rows = await Promise.all(
           ended.map(async (s) => {
             try {
@@ -158,6 +158,10 @@ export default function StudentAttendanceHistory() {
                 topic: s.topic,
                 room: s.room,
                 is_active: s.is_active,
+                start_time: s.start_time || null,
+                end_time: s.end_time || null,
+                actual_start_time: s.actual_start_time || null,
+                actual_end_time: s.actual_end_time || null,
                 status: rec?.status || "absent",
                 score: rec?.score ?? null,
                 timestamp: rec?.timestamp || null,
@@ -333,7 +337,7 @@ export default function StudentAttendanceHistory() {
                   value={selectedCourse?.id || ""}
                   onChange={(e) => {
                     const c = courses.find(
-                      (x) => x.id === parseInt(e.target.value),
+                      (x) => String(x.id) === String(e.target.value),
                     );
                     setSelectedCourse(c || null);
                   }}
@@ -436,6 +440,7 @@ export default function StudentAttendanceHistory() {
                         <th className="pb-3 pl-4 w-12">Week</th>
                         <th className="pb-3">Date</th>
                         <th className="pb-3">Topic / Room</th>
+                        <th className="pb-3 text-center">Class Time</th>
                         <th className="pb-3 text-center">Check-in</th>
                         <th className="pb-3 text-center">Score</th>
                         <th className="pb-3 text-center">Status</th>
@@ -474,6 +479,31 @@ export default function StudentAttendanceHistory() {
                             {s.room && <p>Room {s.room}</p>}
                             {!s.topic && !s.room && (
                               <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="text-center font-mono text-xs text-gray-500 whitespace-nowrap">
+                            {s.actual_start_time ? (
+                              <span>
+                                {new Date(
+                                  s.actual_start_time,
+                                ).toLocaleTimeString("en-US", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  hour12: false,
+                                })}
+                                <span className="text-gray-300 mx-1">–</span>
+                                {s.actual_end_time
+                                  ? new Date(
+                                      s.actual_end_time,
+                                    ).toLocaleTimeString("en-US", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                      hour12: false,
+                                    })
+                                  : "ongoing"}
+                              </span>
+                            ) : (
+                              "—"
                             )}
                           </td>
                           <td className="text-center font-mono text-xs text-gray-500">

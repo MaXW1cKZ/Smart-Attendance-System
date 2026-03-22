@@ -55,7 +55,8 @@ const Login = () => {
       handleLoginSuccessData(res.data);
     } catch (err) {
       console.error(err);
-      setError("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+      const detail = err.response?.data?.detail;
+      setError(detail || "อีเมลหรือรหัสผ่านไม่ถูกต้อง");
     }
   };
 
@@ -68,7 +69,8 @@ const Login = () => {
       handleLoginSuccessData(res.data);
     } catch (err) {
       console.error("Google Login Failed:", err);
-      setError("เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
+      const detail = err.response?.data?.detail;
+      setError(detail || "เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
     }
   };
 

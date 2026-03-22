@@ -381,7 +381,8 @@ async def get_course_sessions(
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
     is_teacher = course.teacher_id == current_user.id
-    if not is_teacher:
+    is_admin = current_user.role == "admin"
+    if not is_teacher and not is_admin:
         enroll_check = await db.execute(
             select(Enrollment).where(
                 Enrollment.course_id == course_id,
@@ -394,6 +395,7 @@ async def get_course_sessions(
 
     result = await db.execute(
         select(ClassSession)
+        .options(selectinload(ClassSession.course))
         .where(ClassSession.course_id == course_id)
         .order_by(ClassSession.week_number)
     )
@@ -408,6 +410,8 @@ async def get_course_sessions(
             "is_active": s.is_active,
             "actual_start_time": s.actual_start_time,
             "actual_end_time": s.actual_end_time,
+            "start_time": s.course.start_time if s.course else None,
+            "end_time": s.course.end_time if s.course else None,
         }
         for s in sessions
     ]
