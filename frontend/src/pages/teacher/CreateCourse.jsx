@@ -11,6 +11,9 @@ import {
   FiStar,
   FiPercent,
   FiAlertCircle,
+  FiSettings,
+  FiPlusSquare,
+  FiPlus,
 } from "react-icons/fi";
 
 const DAYS = [
@@ -73,23 +76,22 @@ export default function CreateCourse() {
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-700 to-slate-800 h-64 relative px-10 pt-10">
+        <div className="bg-gradient-to-r from-blue-700 to-slate-900 h-64 relative px-10 pt-10">
           <div className="relative z-10 flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">
+              <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+                <FiPlus
+                  className="bg-white/10 p-1.5 rounded-lg"
+                  size={36}
+                />
                 Create New Course
               </h1>
-              <p className="text-blue-100 opacity-80 text-sm">
+              <p className="text-slate-300 opacity-80 text-sm">
                 A new session will be created automatically each time you press
                 Start
               </p>
             </div>
-            <button
-              onClick={() => navigate("/teacher/dashboard")}
-              className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-xl transition"
-            >
-              <FiX size={22} />
-            </button>
+            
           </div>
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
         </div>
@@ -334,7 +336,7 @@ export default function CreateCourse() {
                         </div>
                         <div>
                           <label className="fl text-blue-600 flex items-center gap-1">
-                            <FiPercent size={11} /> Pass Threshold
+                            Pass Threshold
                           </label>
                           <div className="relative">
                             <input

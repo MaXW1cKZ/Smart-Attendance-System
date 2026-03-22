@@ -768,20 +768,109 @@ async def search_course(course_code: str, db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.get("/{course_id}/students")
-async def get_course_students(course_id: int, db: AsyncSession = Depends(get_db)):
+@router.get("/courses/{course_id}/students")
+async def get_course_students(
+    course_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalars().first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    if course.teacher_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     stmt = (
         select(User)
         .join(Enrollment, User.id == Enrollment.student_id)
         .where(Enrollment.course_id == course_id)
+        .order_by(User.full_name)
     )
     result = await db.execute(stmt)
     students = result.scalars().all()
 
     return [
-        {"student_id": str(student.id), "name": student.full_name}
-        for student in students
+        {"id": s.id, "student_id": str(s.id), "name": s.full_name, "email": s.email}
+        for s in students
     ]
+
+
+@router.delete("/courses/{course_id}/students/{student_id}")
+async def remove_student_from_course(
+    course_id: int,
+    student_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Teacher removes a student from their course."""
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalars().first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    if course.teacher_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    enroll_result = await db.execute(
+        select(Enrollment).where(
+            Enrollment.course_id == course_id,
+            Enrollment.student_id == student_id,
+        )
+    )
+    enrollment = enroll_result.scalars().first()
+    if not enrollment:
+        raise HTTPException(
+            status_code=404, detail="Student not enrolled in this course"
+        )
+
+    await db.delete(enrollment)
+    await db.commit()
+    return {"message": "Student removed from course"}
+
+
+@router.post("/courses/{course_id}/students/enroll")
+async def teacher_enroll_student(
+    course_id: int,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Teacher enrolls a student by email into their course."""
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalars().first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    if course.teacher_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    student_email = data.get("student_email", "").strip()
+    if not student_email:
+        raise HTTPException(status_code=400, detail="student_email is required")
+
+    student_result = await db.execute(
+        select(User).where(User.email == student_email, User.role == "student")
+    )
+    student = student_result.scalars().first()
+    if not student:
+        raise HTTPException(
+            status_code=404, detail=f"Student '{student_email}' not found"
+        )
+
+    check = await db.execute(
+        select(Enrollment).where(
+            Enrollment.course_id == course_id,
+            Enrollment.student_id == student.id,
+        )
+    )
+    if check.scalars().first():
+        raise HTTPException(status_code=400, detail="Student is already enrolled")
+
+    db.add(Enrollment(course_id=course_id, student_id=student.id))
+    await db.commit()
+    return {
+        "message": f"{student.full_name} enrolled successfully",
+        "student_id": student.id,
+    }
 
 
 @router.put("/{course_id}")
@@ -837,3 +926,50 @@ async def update_session(
     await db.commit()
     await db.refresh(session_obj)
     return {"message": "Session updated"}
+
+
+@router.get("/{course_id}/overall-report")
+async def get_course_overall_report(course_id: int, db: AsyncSession = Depends(get_db)):
+    stmt_students = (
+        select(User)
+        .join(Enrollment, User.id == Enrollment.student_id)
+        .where(Enrollment.course_id == course_id)
+    )
+    students = (await db.execute(stmt_students)).scalars().all()
+
+    stmt_sessions = select(ClassSession.id).where(ClassSession.course_id == course_id)
+    session_ids = (await db.execute(stmt_sessions)).scalars().all()
+
+    records = []
+    if session_ids:
+        stmt_att = select(Attendance).where(Attendance.session_id.in_(session_ids))
+        records = (await db.execute(stmt_att)).scalars().all()
+
+    report = []
+    for student in students:
+        student_atts = [r for r in records if r.student_id == student.id]
+
+        present = sum(1 for r in student_atts if r.status.value == "present")
+        late = sum(1 for r in student_atts if r.status.value == "late")
+        absent = sum(1 for r in student_atts if r.status.value == "absent")
+        total_score = sum((r.score or 0.0) for r in student_atts)
+
+        report.append(
+            {
+                "student_id": str(student.id),
+                "name": student.full_name,
+                "email": student.email,
+                "present": present,
+                "late": late,
+                "absent": absent,
+                "total_score": total_score,
+            }
+        )
+
+    return {
+        "summary": {
+            "total_students": len(students),
+            "total_sessions": len(session_ids),
+        },
+        "records": report,
+    }

@@ -444,6 +444,101 @@ async def get_admin_logs(
     }
 
 
+@router.get("/courses/{course_id}/sessions")
+async def get_course_sessions_admin(
+    course_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Admin — get all sessions for a course."""
+    result = await db.execute(
+        select(ClassSession)
+        .where(ClassSession.course_id == course_id)
+        .order_by(ClassSession.week_number)
+    )
+    sessions = result.scalars().all()
+    return [
+        {
+            "id": s.id,
+            "week_number": s.week_number,
+            "date": s.date,
+            "topic": s.topic,
+            "room": s.room,
+            "is_active": s.is_active,
+            "actual_start_time": s.actual_start_time,
+            "actual_end_time": s.actual_end_time,
+        }
+        for s in sessions
+    ]
+
+
+@router.get("/courses/{course_id}/students")
+async def get_course_students_admin(
+    course_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Admin — get enrolled students for a course."""
+    stmt = (
+        select(User)
+        .join(Enrollment, User.id == Enrollment.student_id)
+        .where(Enrollment.course_id == course_id)
+        .order_by(User.full_name)
+    )
+    result = await db.execute(stmt)
+    students = result.scalars().all()
+    return [
+        {"id": s.id, "student_id": str(s.id), "name": s.full_name, "email": s.email}
+        for s in students
+    ]
+
+
+@router.patch("/courses/{course_id}")
+async def admin_update_course(
+    course_id: int,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Admin — update course settings."""
+    from datetime import datetime as dt
+
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalars().first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    allowed = {
+        "name",
+        "section",
+        "day_of_week",
+        "use_scoring",
+        "score_present",
+        "score_late",
+        "attendance_threshold",
+        "late_after_minutes",
+        "absent_after_minutes",
+    }
+    for key, value in data.items():
+        if key in allowed and value is not None:
+            setattr(course, key, value)
+    if "start_time" in data and data["start_time"]:
+        course.start_time = dt.strptime(data["start_time"], "%H:%M").time()
+    if "end_time" in data and data["end_time"]:
+        course.end_time = dt.strptime(data["end_time"], "%H:%M").time()
+
+    await db.commit()
+    await _log(
+        db,
+        admin,
+        "update_course",
+        "course",
+        course_id,
+        f"Updated course: {course.course_code}",
+    )
+    return {"message": "Course updated successfully"}
+
+
 @router.get("/users/{user_id}/courses")
 async def get_student_courses(
     user_id: int,

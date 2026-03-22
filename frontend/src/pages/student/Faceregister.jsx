@@ -18,19 +18,19 @@ const STEPS = [
     id: "straight",
     label: "Straight Face",
     instruction: "Look straight at the camera.",
-    icon: <FiUser size={20} />,
+    icon: <FiUser size={18} />,
   },
   {
     id: "left",
     label: "Turn Left",
     instruction: "Turn your face slightly to the left.",
-    icon: <FiArrowLeft size={20} />,
+    icon: <FiArrowLeft size={18} />,
   },
   {
     id: "right",
     label: "Turn Right",
     instruction: "Turn your face slightly to the right.",
-    icon: <FiArrowRight size={20} />,
+    icon: <FiArrowRight size={18} />,
   },
 ];
 
@@ -40,7 +40,6 @@ const FaceRegister = () => {
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const imagesRef = useRef([]);
-
   const [isCountDown, setIsCountDown] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -48,7 +47,6 @@ const FaceRegister = () => {
   const [faceDetected, setFaceDetected] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  /* load face-api models */
   useEffect(() => {
     faceapi.nets.tinyFaceDetector
       .loadFromUri("/models")
@@ -56,7 +54,6 @@ const FaceRegister = () => {
       .catch((err) => console.error("Failed to load models:", err));
   }, []);
 
-  /* face detection loop */
   useEffect(() => {
     if (!isModelLoaded) return;
     const interval = setInterval(async () => {
@@ -82,8 +79,7 @@ const FaceRegister = () => {
         if (resized.length > 0) {
           const face = resized[0];
           const { width, height, x } = face.box;
-          const score = face.score;
-          const isClear = score > 0.7;
+          const isClear = face.score > 0.7;
           const isLarge = width > 100 && height > 100;
           const isCentered =
             Math.abs(displaySize.width / 2 - (x + width / 2)) < 150;
@@ -169,29 +165,33 @@ const FaceRegister = () => {
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        <div className="bg-gradient-to-r from-blue-700 to-slate-900 h-64 relative px-10 pt-10 pb-24">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-700 to-slate-900 h-52 sm:h-64 relative px-4 sm:px-8 md:px-10 pt-14 sm:pt-10 pb-20 sm:pb-24">
           <div className="relative z-10">
-            <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-              <FiCamera className="bg-white/10 p-1.5 rounded-lg" size={36} />
+            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 flex items-center gap-3">
+              <FiCamera
+                className="bg-white/10 p-1.5 rounded-lg hidden sm:block"
+                size={36}
+              />
               Face Registration
             </h1>
-            <p className="text-slate-300 opacity-90 pl-1">
+            <p className="text-blue-100 opacity-90 pl-1 text-sm">
               Register your face so the system can check you in automatically
             </p>
           </div>
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
         </div>
 
-        <div className="px-10 -mt-20 pb-10 relative z-20">
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
+        <div className="px-4 sm:px-8 md:px-10 -mt-16 sm:-mt-20 pb-8 sm:pb-10 relative z-20">
+          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-gray-100 p-5 sm:p-8">
             {errorMsg && (
-              <div className="flex items-center gap-2 text-rose-600 bg-rose-50 border border-rose-200 px-4 py-3 rounded-xl mb-6">
+              <div className="flex items-center gap-2 text-rose-600 bg-rose-50 border border-rose-200 px-4 py-3 rounded-xl mb-5 sm:mb-6">
                 <FiAlertCircle size={16} />
                 <span className="text-sm font-semibold">{errorMsg}</span>
               </div>
             )}
             {isSuccess && (
-              <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 border border-emerald-200 px-4 py-3 rounded-xl mb-6">
+              <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 border border-emerald-200 px-4 py-3 rounded-xl mb-5 sm:mb-6">
                 <FiCheckCircle size={16} />
                 <span className="text-sm font-semibold">
                   Face registered successfully!
@@ -199,9 +199,14 @@ const FaceRegister = () => {
               </div>
             )}
 
-            <div className="flex gap-8 flex-col lg:flex-row">
+            {/* Webcam + controls — stacks vertically on mobile, side-by-side on lg */}
+            <div className="flex flex-col lg:flex-row gap-5 sm:gap-8">
+              {/* Camera */}
               <div className="flex-1">
-                <div className="relative aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-gray-200 shadow-inner">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                  Camera
+                </p>
+                <div className="relative aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-gray-200">
                   <Webcam
                     ref={webcamRef}
                     audio={false}
@@ -215,7 +220,7 @@ const FaceRegister = () => {
 
                   {!isModelLoaded && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-white z-10 gap-3">
-                      <FiRefreshCw className="animate-spin" size={32} />
+                      <FiRefreshCw className="animate-spin" size={28} />
                       <span className="text-sm font-semibold">
                         Loading AI model…
                       </span>
@@ -239,42 +244,45 @@ const FaceRegister = () => {
                 </div>
               </div>
 
-              <div className="w-full lg:w-80 flex flex-col gap-5">
+              {/* Steps + progress + button */}
+              <div className="w-full lg:w-80 flex flex-col gap-4 sm:gap-5">
+                {/* Steps */}
                 <div>
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                     Steps
                   </p>
-                  <div className="space-y-3">
+                  {/* mobile: horizontal row, desktop: vertical */}
+                  <div className="flex flex-row lg:flex-col gap-2 sm:gap-3">
                     {STEPS.map((step, idx) => {
                       const done = idx < currentStepIndex || isSuccess;
                       const active = idx === currentStepIndex && !isSuccess;
                       return (
                         <div
                           key={step.id}
-                          className={`flex items-center gap-3 p-4 rounded-2xl border transition-all ${
+                          className={`flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-2xl border transition-all flex-1 lg:flex-none ${
                             done
                               ? "border-emerald-200 bg-emerald-50"
                               : active
-                                ? "border-slate-300 bg-slate-50"
+                                ? "border-blue-300 bg-blue-50"
                                 : "border-gray-100 bg-gray-50 opacity-50"
                           }`}
                         >
                           <div
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 ${
                               done
                                 ? "bg-emerald-500 text-white"
                                 : active
-                                  ? "bg-slate-700 text-white"
+                                  ? "bg-blue-600 text-white"
                                   : "bg-gray-200 text-gray-400"
                             }`}
                           >
-                            {done ? <FiCheckCircle size={16} /> : step.icon}
+                            {done ? <FiCheckCircle size={15} /> : step.icon}
                           </div>
-                          <div>
-                            <p className="font-bold text-sm text-gray-800">
+                          <div className="text-center sm:text-left">
+                            <p className="font-bold text-xs sm:text-sm text-gray-800">
                               {step.label}
                             </p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">
                               {step.instruction}
                             </p>
                           </div>
@@ -284,6 +292,7 @@ const FaceRegister = () => {
                   </div>
                 </div>
 
+                {/* Progress */}
                 <div>
                   <div className="flex justify-between text-xs font-bold text-gray-400 mb-1.5">
                     <span>Progress</span>
@@ -291,7 +300,7 @@ const FaceRegister = () => {
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-slate-700 rounded-full transition-all duration-500"
+                      className="h-full bg-blue-600 rounded-full transition-all duration-500"
                       style={{
                         width: `${isSuccess ? 100 : (currentStepIndex / 3) * 100}%`,
                       }}
@@ -299,13 +308,14 @@ const FaceRegister = () => {
                   </div>
                 </div>
 
+                {/* Capture button */}
                 {!isSuccess ? (
                   <button
                     onClick={captureFrame}
                     disabled={!faceDetected || isCountDown || isUploading}
-                    className={`w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 transition-all shadow-lg ${
+                    className={`w-full py-3.5 sm:py-4 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all shadow-lg ${
                       faceDetected && !isCountDown && !isUploading
-                        ? "bg-slate-800 hover:bg-slate-700 text-white shadow-slate-200 hover:-translate-y-0.5"
+                        ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 hover:-translate-y-0.5"
                         : "bg-gray-100 text-gray-400 cursor-not-allowed"
                     }`}
                   >
@@ -327,7 +337,7 @@ const FaceRegister = () => {
                 ) : (
                   <button
                     onClick={resetProcess}
-                    className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-600 transition"
+                    className="w-full py-3.5 sm:py-4 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-600 transition"
                   >
                     <FiRefreshCw size={16} /> Register Again
                   </button>

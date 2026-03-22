@@ -31,6 +31,7 @@ import UserManagement from "./pages/admin/UserManagement";
 import AdminCreateCourse from "./pages/admin/AdminCreateCourse";
 import StudentAttendanceHistory from "./pages/admin/StudentAttendanceHistory";
 import CourseOverview from "./pages/admin/CourseOverview";
+import AdminManageCourse from "./pages/admin/AdminManageCourse";
 import ActivityLog from "./pages/admin/Activitylog";
 
 const DashboardRedirect = () => {
@@ -178,7 +179,6 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
               <AdminCreateCourse />{" "}
-              {/* ใช้ AdminCreateCourse ตามไฟล์ที่คุณมี */}
             </ProtectedRoute>
           }
         />
@@ -187,6 +187,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
               <CourseOverview />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/courses/:courseId"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <AdminManageCourse />
             </ProtectedRoute>
           }
         />

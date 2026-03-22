@@ -6,7 +6,6 @@ import {
   FiBook,
   FiClock,
   FiCheckCircle,
-  FiActivity,
   FiPlusSquare,
   FiXCircle,
   FiAlertCircle,
@@ -18,6 +17,7 @@ import {
   FiBarChart2,
   FiCalendar,
 } from "react-icons/fi";
+
 const pctBarColor = (pct, threshold) => {
   if (pct >= threshold) return "bg-emerald-400";
   if (pct >= threshold * 0.85) return "bg-orange-400";
@@ -79,13 +79,9 @@ export default function StudentDashboard() {
   }, [courses]);
 
   const todayStr = currentTime.toLocaleDateString("en-US", { weekday: "long" });
-
   const enrolledCount = courses.length;
-
   const classesThisWeek = courses.length;
-
   const classesToday = courses.filter((c) => c.day_of_week === todayStr).length;
-
   const warningCourses = courses.filter((c) => {
     const r = reports[c.id];
     if (!r) return false;
@@ -93,7 +89,6 @@ export default function StudentDashboard() {
     return me && me.attendance_pct < (r.course?.attendance_threshold || 80);
   });
   const atRiskCount = warningCourses.length;
-
   const hour = currentTime.getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -102,21 +97,26 @@ export default function StudentDashboard() {
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        <div className="bg-gradient-to-r from-blue-700 to-slate-800 h-64 relative px-10 pt-10 pb-24">
+        {/* ── Header ── */}
+        <div className="bg-gradient-to-r from-blue-700 to-slate-900 h-52 sm:h-64 relative px-4 sm:px-8 md:px-10 pt-14 sm:pt-10 pb-20 sm:pb-24">
           <div className="flex justify-between items-start relative z-10">
             <div>
-              <p className="text-slate-300 text-sm font-medium mb-1">
+              <p className="text-blue-100 text-xs sm:text-sm font-medium mb-1">
                 {greeting}
               </p>
-              <h1 className="text-4xl font-bold text-white mb-1 flex items-center gap-3">
-                <FiUser className="bg-white/10 p-1.5 rounded-lg" size={36} />
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 flex items-center gap-2 sm:gap-3">
+                <FiUser
+                  className="bg-white/10 p-1.5 rounded-lg hidden sm:block"
+                  size={32}
+                />
                 {studentName}
               </h1>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-5 py-3 text-white flex items-center gap-3">
-                <FiClock size={18} />
-                <span className="font-mono font-bold text-xl tracking-widest">
+            {/* clock — hidden on small mobile */}
+            <div className="hidden sm:flex items-center gap-3">
+              <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-3 sm:px-5 py-2 sm:py-3 text-white flex items-center gap-2 sm:gap-3">
+                <FiClock size={16} />
+                <span className="font-mono font-bold text-base sm:text-xl tracking-widest">
                   {currentTime.toLocaleTimeString("en-US", { hour12: false })}
                 </span>
               </div>
@@ -124,17 +124,19 @@ export default function StudentDashboard() {
           </div>
 
           {successMsg && (
-            <div className="absolute bottom-4 left-10 right-10 bg-emerald-500/90 backdrop-blur text-white px-5 py-3 rounded-xl text-sm font-semibold flex items-center gap-2 z-10">
+            <div className="absolute bottom-4 left-4 right-4 sm:left-10 sm:right-10 bg-emerald-500/90 backdrop-blur text-white px-4 sm:px-5 py-3 rounded-xl text-sm font-semibold flex items-center gap-2 z-10">
               <FiCheckCircle /> {successMsg}
             </div>
           )}
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
         </div>
 
-        <div className="px-10 -mt-20 pb-10 relative z-20">
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 min-h-[600px] flex flex-col gap-6">
+        {/* ── Content ── */}
+        <div className="px-4 sm:px-8 md:px-10 -mt-16 sm:-mt-20 pb-8 sm:pb-10 relative z-20">
+          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-gray-100 p-5 sm:p-8 min-h-[500px] flex flex-col gap-5 sm:gap-6">
+            {/* Face registration banner */}
             {faceRegistered === false && (
-              <div className="flex items-center justify-between gap-4 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-amber-50 border border-amber-200 rounded-2xl px-4 sm:px-5 py-4">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600 shrink-0">
                     <FiCamera size={18} />
@@ -151,14 +153,14 @@ export default function StudentDashboard() {
                 </div>
                 <button
                   onClick={() => navigate("/student/register-face")}
-                  className="shrink-0 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition"
+                  className="self-start sm:self-auto shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition"
                 >
                   Register Now <FiArrowRight size={12} />
                 </button>
               </div>
             )}
             {faceRegistered === true && (
-              <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-3">
+              <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 sm:px-5 py-3">
                 <FiCheckCircle
                   className="text-emerald-500 shrink-0"
                   size={16}
@@ -168,63 +170,64 @@ export default function StudentDashboard() {
                 </p>
                 <button
                   onClick={() => navigate("/student/register-face")}
-                  className="ml-auto text-xs text-slate-500 font-bold hover:underline"
+                  className="ml-auto text-xs text-slate-500 font-bold hover:underline whitespace-nowrap"
                 >
                   Re-register
                 </button>
               </div>
             )}
 
+            {/* Summary cards */}
             {courses.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <SummaryCard
                   label="Enrolled"
                   value={enrolledCount}
                   color="blue"
-                  icon={<FiBook size={14} />}
+                  icon={<FiBook size={13} />}
                   sub="Active courses"
                 />
                 <SummaryCard
                   label="This Week"
                   value={classesThisWeek}
                   color="slate"
-                  icon={<FiCalendar size={14} />}
+                  icon={<FiCalendar size={13} />}
                   sub="Total sessions"
                 />
                 <SummaryCard
-                  label="Classes Today"
+                  label="Today"
                   value={classesToday}
                   color={classesToday > 0 ? "emerald" : "slate"}
-                  icon={<FiClock size={14} />}
+                  icon={<FiClock size={13} />}
                   sub={todayStr}
                 />
                 <SummaryCard
                   label="At Risk"
                   value={atRiskCount}
                   color={atRiskCount > 0 ? "rose" : "emerald"}
-                  icon={<FiAlertTriangle size={14} />}
-                  sub={
-                    atRiskCount > 0 ? "Below attendance criteria" : "All good ✓"
-                  }
+                  icon={<FiAlertTriangle size={13} />}
+                  sub={atRiskCount > 0 ? "Below criteria" : "All good ✓"}
                 />
               </div>
             )}
 
+            {/* No courses empty state */}
             {courses.length === 0 && (
-              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3">
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 py-12">
                 <FiBook size={48} className="opacity-20" />
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-center">
                   You haven't enrolled in any courses yet
                 </p>
                 <button
                   onClick={() => navigate("/student/enroll")}
-                  className="mt-2 inline-flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-slate-200"
+                  className="mt-2 inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-200"
                 >
                   <FiPlusSquare size={14} /> Join Your First Course
                 </button>
               </div>
             )}
 
+            {/* Course list */}
             {courses.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -233,13 +236,13 @@ export default function StudentDashboard() {
                   </p>
                   <button
                     onClick={() => navigate("/student/stu-attendance")}
-                    className="text-xs text-slate-600 font-bold hover:underline flex items-center gap-1"
+                    className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1"
                   >
                     Full report <FiArrowRight size={11} />
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   {courses.map((c) => {
                     const r = reports[c.id];
                     const me = r?.students?.find(
@@ -257,12 +260,12 @@ export default function StudentDashboard() {
                             state: { courseId: c.id },
                           })
                         }
-                        className="rounded-2xl border border-gray-100 bg-gray-50/50 p-5 cursor-pointer hover:bg-white hover:shadow-sm transition-all group"
+                        className="rounded-2xl border border-gray-100 bg-gray-50/50 p-4 sm:p-5 cursor-pointer hover:bg-white hover:shadow-sm transition-all group"
                       >
                         <div className="flex items-start justify-between mb-3">
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-lg">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-lg">
                                 {c.course_code}
                               </span>
                               <span className="text-xs text-gray-400 font-medium">
@@ -280,7 +283,7 @@ export default function StudentDashboard() {
                           </div>
                           <FiChevronRight
                             size={15}
-                            className="text-gray-300 group-hover:text-slate-500 transition shrink-0 mt-1"
+                            className="text-gray-300 group-hover:text-blue-500 transition shrink-0 mt-1"
                           />
                         </div>
 
@@ -288,7 +291,7 @@ export default function StudentDashboard() {
                           <div className="h-8 bg-gray-100 rounded-lg animate-pulse" />
                         ) : me ? (
                           <>
-                            <div className="flex items-center gap-3 mb-3 text-xs font-bold">
+                            <div className="flex items-center gap-2 sm:gap-3 mb-3 text-xs font-bold flex-wrap">
                               <span className="flex items-center gap-1 text-emerald-600">
                                 <FiCheckCircle size={11} /> {me.present} present
                               </span>
@@ -364,20 +367,24 @@ export default function StudentDashboard() {
 function SummaryCard({ label, value, color, icon, sub }) {
   const colors = {
     blue: "from-blue-600 to-blue-500 shadow-blue-200",
-    slate: "from-slate-600 to-slate-500 shadow-slate-200",
+    slate: "from-slate-600 to-slate-500 shadow-blue-200",
     emerald: "from-emerald-500 to-teal-400 shadow-emerald-200",
     orange: "from-orange-400 to-amber-400 shadow-orange-200",
     rose: "from-rose-500 to-pink-500 shadow-rose-200",
   };
   return (
     <div
-      className={`rounded-2xl p-5 text-white bg-gradient-to-br ${colors[color]} shadow-lg`}
+      className={`rounded-2xl p-4 sm:p-5 text-white bg-gradient-to-br ${colors[color]} shadow-lg`}
     >
-      <div className="flex items-center gap-2 text-white/90 mb-2 text-xs font-bold uppercase tracking-wider">
+      <div className="flex items-center gap-1.5 text-white/90 mb-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider">
         {icon} {label}
       </div>
-      <p className="text-4xl font-black">{value}</p>
-      {sub && <p className="text-white/80 text-xs mt-1 font-medium">{sub}</p>}
+      <p className="text-3xl sm:text-4xl font-black">{value}</p>
+      {sub && (
+        <p className="text-white/80 text-[10px] sm:text-xs mt-1 font-medium truncate">
+          {sub}
+        </p>
+      )}
     </div>
   );
 }

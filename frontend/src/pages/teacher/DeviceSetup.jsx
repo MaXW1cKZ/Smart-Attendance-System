@@ -105,7 +105,7 @@ const DeviceSetup = () => {
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-700 to-slate-800 h-64 relative px-10 pt-10 pb-24">
+        <div className="bg-gradient-to-r from-blue-700 to-slate-900 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10 flex justify-between items-start text-white">
             <div>
               <h1 className="text-3xl font-bold mb-1">Start Attendance</h1>
@@ -236,7 +236,7 @@ const DeviceSetup = () => {
               </div>
               <input
                 type="text"
-                placeholder="e.g. Chapter 5: Database Normalization"
+                placeholder="..."
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
                 className="w-full px-4 py-3 bg-gray-50 rounded-xl text-sm font-medium text-gray-700 border border-transparent focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 outline-none transition"

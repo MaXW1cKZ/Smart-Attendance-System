@@ -268,13 +268,13 @@ export default function Stu_Attendance() {
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-700 to-slate-800 h-64 relative px-10 pt-10 pb-24">
+        <div className="bg-gradient-to-r from-blue-700 to-slate-900 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10">
             <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
               <FiFileText className="bg-white/10 p-1.5 rounded-lg" size={36} />
               My Attendance
             </h1>
-            <p className="text-slate-300 opacity-90">
+            <p className="text-blue-100 opacity-90">
               View your attendance records and overall performance
             </p>
           </div>
@@ -381,7 +381,7 @@ export default function Stu_Attendance() {
                       {search && (
                         <button
                           onClick={() => setSearch("")}
-                          className="text-gray-400 hover:text-slate-600 transition"
+                          className="text-gray-400 hover:text-blue-600 transition"
                         >
                           <FiX size={14} />
                         </button>
@@ -532,7 +532,7 @@ export default function Stu_Attendance() {
                           onClick={() => setPage(p)}
                           className={`w-9 h-9 flex items-center justify-center rounded-lg text-sm font-bold transition ${
                             p === page
-                              ? "bg-slate-700 text-white"
+                              ? "bg-blue-600 text-white"
                               : "border text-gray-500 hover:bg-gray-50"
                           }`}
                         >
@@ -560,7 +560,7 @@ export default function Stu_Attendance() {
 
 function SummaryCard({ label, value, color, icon, sub }) {
   const colors = {
-    blue: "from-blue-500 to-blue-500 shadow-slate-200",
+    blue: "from-blue-500 to-blue-500 shadow-blue-200",
     emerald: "from-emerald-500 to-teal-400 shadow-emerald-200",
     orange: "from-orange-400 to-amber-400 shadow-orange-200",
     rose: "from-rose-500 to-pink-500 shadow-rose-200",

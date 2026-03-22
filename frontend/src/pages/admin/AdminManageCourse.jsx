@@ -9,7 +9,6 @@ import {
   FiUsers,
   FiClock,
   FiCheck,
-  FiX,
   FiAlertCircle,
   FiStar,
   FiPercent,
@@ -19,6 +18,8 @@ import {
   FiTrash2,
   FiEdit,
   FiCheckCircle,
+  FiUserPlus,
+  FiX,
 } from "react-icons/fi";
 
 const DAYS = [
@@ -70,7 +71,7 @@ function ConfirmModal({
   );
 }
 
-export default function ManageCourse() {
+export default function AdminManageCourse() {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("settings");
@@ -79,9 +80,11 @@ export default function ManageCourse() {
 
   useEffect(() => {
     api
-      .get("/courses/my-courses")
+      .get("/admin/courses?limit=9999")
       .then((r) => {
-        const found = r.data.find((c) => String(c.id) === String(courseId));
+        const found = (r.data.courses || []).find(
+          (c) => String(c.id) === String(courseId),
+        );
         setCourse(found || null);
       })
       .catch(console.error)
@@ -112,7 +115,7 @@ export default function ManageCourse() {
           <FiAlertCircle size={48} className="opacity-20" />
           <p className="font-medium">Course not found</p>
           <button
-            onClick={() => navigate("/teacher/course-settings")}
+            onClick={() => navigate("/admin/courses")}
             className="text-blue-600 font-bold text-sm hover:underline"
           >
             Back to courses
@@ -125,12 +128,11 @@ export default function ManageCourse() {
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-700 to-slate-900 h-64 relative px-10 pt-10 pb-24">
+        <div className="bg-gradient-to-r from-slate-800 to-slate-700 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10">
             <button
-              onClick={() => navigate("/teacher/course-settings")}
-              className="flex items-center gap-2 text-blue-200 hover:text-white text-sm font-semibold mb-4 transition-colors"
+              onClick={() => navigate("/admin/courses")}
+              className="flex items-center gap-2 text-slate-300 hover:text-white text-sm font-semibold mb-4 transition-colors"
             >
               <FiArrowLeft size={16} /> Back to courses
             </button>
@@ -138,15 +140,21 @@ export default function ManageCourse() {
               <span className="text-xs font-bold bg-white/20 text-white px-2.5 py-1 rounded-lg">
                 {course.course_code}
               </span>
-              <span className="text-xs text-blue-200 font-semibold">
+              <span className="text-xs text-slate-300 font-semibold">
                 Sec {course.section} · Sem {course.semester} ·{" "}
                 {course.academic_year}
               </span>
+              {course.teacher_name && (
+                <span className="text-xs text-slate-400 font-medium">
+                  · {course.teacher_name}
+                </span>
+              )}
             </div>
             <h1 className="text-3xl font-bold text-white">{course.name}</h1>
-            <p className="text-blue-100 text-sm mt-1">
-              {course.day_of_week} · {String(course.start_time).slice(0, 5)}–
-              {String(course.end_time).slice(0, 5)}
+            <p className="text-slate-300 text-sm mt-1">
+              {course.day_of_week} ·{" "}
+              {String(course.start_time || "").slice(0, 5)}–
+              {String(course.end_time || "").slice(0, 5)}
             </p>
           </div>
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
@@ -154,7 +162,6 @@ export default function ManageCourse() {
 
         <div className="px-10 -mt-20 pb-10 relative z-20">
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 min-h-[600px] flex flex-col">
-            {/* Tab bar */}
             <div className="flex border-b border-gray-100 px-8 pt-6">
               {TABS.map((tab) => (
                 <button
@@ -162,7 +169,7 @@ export default function ManageCourse() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-2 px-5 py-3 text-sm font-bold border-b-2 transition-all -mb-px ${
                     activeTab === tab.id
-                      ? "border-blue-600 text-blue-600"
+                      ? "border-slate-700 text-slate-700"
                       : "border-transparent text-gray-400 hover:text-gray-600"
                   }`}
                 >
@@ -171,17 +178,22 @@ export default function ManageCourse() {
               ))}
             </div>
 
-            {/* Tab content — centered container */}
             <div className="flex-1 p-8">
               {activeTab === "settings" && (
                 <SettingsTab
                   course={course}
                   onSaved={setCourse}
-                  onDeleted={() => navigate("/teacher/course-settings")}
+                  onDeleted={() => navigate("/admin/courses")}
                 />
               )}
               {activeTab === "sessions" && <SessionsTab courseId={courseId} />}
-              {activeTab === "students" && <StudentsTab courseId={courseId} />}
+              {activeTab === "students" && (
+                <StudentsTab
+                  courseId={courseId}
+                  courseName={course.name}
+                  courseCode={course.course_code}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -190,6 +202,9 @@ export default function ManageCourse() {
   );
 }
 
+/* ══════════════════════════════════════════
+   TAB 1: SETTINGS
+══════════════════════════════════════════ */
 function SettingsTab({ course, onSaved, onDeleted }) {
   const [form, setForm] = useState({
     name: course.name,
@@ -216,7 +231,7 @@ function SettingsTab({ course, onSaved, onDeleted }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch(`/courses/${course.id}`, form);
+      await api.patch(`/admin/courses/${course.id}`, form);
       onSaved((prev) => ({ ...prev, ...form }));
       setSaveConfirm(false);
       setSaved(true);
@@ -230,7 +245,7 @@ function SettingsTab({ course, onSaved, onDeleted }) {
 
   const handleDelete = async () => {
     try {
-      await api.delete(`/courses/${course.id}`);
+      await api.delete(`/admin/courses/${course.id}`);
       onDeleted();
     } catch (err) {
       alert(err.response?.data?.detail || "Failed to delete");
@@ -248,7 +263,6 @@ function SettingsTab({ course, onSaved, onDeleted }) {
         </div>
       )}
 
-      {/* Course Info */}
       <div>
         <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">
           Course Information
@@ -273,7 +287,6 @@ function SettingsTab({ course, onSaved, onDeleted }) {
         </div>
       </div>
 
-      {/* Schedule */}
       <div>
         <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">
           Schedule
@@ -286,7 +299,7 @@ function SettingsTab({ course, onSaved, onDeleted }) {
                 key={d}
                 type="button"
                 onClick={() => set("day_of_week", d)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${form.day_of_week === d ? "bg-blue-600 text-white border-blue-600" : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300"}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${form.day_of_week === d ? "bg-slate-700 text-white border-slate-700" : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300"}`}
               >
                 {d.substring(0, 3)}
               </button>
@@ -315,14 +328,12 @@ function SettingsTab({ course, onSaved, onDeleted }) {
         </div>
       </div>
 
-      {/* Timing */}
       <div>
         <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
           Attendance Timing
         </p>
         <p className="text-xs text-gray-400 mb-4">
-          Counted from the moment <strong>Start Session</strong> is pressed —
-          not scheduled class time
+          Counted from the moment <strong>Start Session</strong> is pressed
         </p>
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
@@ -392,7 +403,6 @@ function SettingsTab({ course, onSaved, onDeleted }) {
         )}
       </div>
 
-      {/* Scoring */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <p className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
@@ -475,7 +485,7 @@ function SettingsTab({ course, onSaved, onDeleted }) {
                 </span>
               </div>
             </div>
-            <p className="col-span-3 text-xs text-slate-600 font-medium">
+            <p className="col-span-3 text-xs text-blue-500 font-medium">
               💡 Absent = 0 pts always · Pass requires at least{" "}
               {form.attendance_threshold}% attendance
             </p>
@@ -488,7 +498,6 @@ function SettingsTab({ course, onSaved, onDeleted }) {
         )}
       </div>
 
-      {/* Actions */}
       <div className="flex gap-3 pt-4 border-t border-gray-100">
         <button
           onClick={() => setDeleteConfirm(true)}
@@ -499,7 +508,7 @@ function SettingsTab({ course, onSaved, onDeleted }) {
         <button
           onClick={() => setSaveConfirm(true)}
           disabled={!isTimingValid}
-          className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold shadow-md shadow-blue-200 hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="flex-1 py-3 rounded-xl bg-slate-700 text-white font-bold shadow-md shadow-slate-200 hover:bg-slate-800 transition flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           <FiCheck size={16} /> Save Changes
         </button>
@@ -517,9 +526,9 @@ function SettingsTab({ course, onSaved, onDeleted }) {
       {deleteConfirm && (
         <ConfirmModal
           title="Delete this course?"
+          danger
           message={`${course.course_code}: ${course.name} — All sessions and attendance records will be permanently deleted.`}
           confirmLabel="Delete"
-          danger
           onConfirm={handleDelete}
           onCancel={() => setDeleteConfirm(false)}
         />
@@ -528,7 +537,7 @@ function SettingsTab({ course, onSaved, onDeleted }) {
       <style>{`
         .field-label { display: block; font-size: 0.7rem; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; }
         .field-input { width: 100%; padding: 0.625rem 0.875rem; background: #f9fafb; border: 1.5px solid transparent; border-radius: 0.75rem; font-weight: 600; color: #374151; font-size: 0.875rem; outline: none; transition: all 0.15s; }
-        .field-input:focus { background: white; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .field-input:focus { background: white; border-color: #475569; box-shadow: 0 0 0 3px rgba(71,85,105,0.1); }
       `}</style>
     </div>
   );
@@ -546,10 +555,8 @@ function SessionsTab({ courseId }) {
   const fetchSessions = useCallback(() => {
     setLoading(true);
     api
-      .get(`/courses/${courseId}/sessions`)
-      .then((r) =>
-        setSessions(r.data.filter((s) => s.actual_start_time || s.is_active)),
-      )
+      .get(`/admin/courses/${courseId}/sessions`)
+      .then((r) => setSessions(r.data || []))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [courseId]);
@@ -630,9 +637,8 @@ function SessionsTab({ courseId }) {
         {sessions.map((s) => (
           <div key={s.id}>
             {editId === s.id ? (
-              /* ── Inline edit ── */
-              <div className="border border-blue-200 bg-blue-50 rounded-2xl p-5">
-                <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-3">
+              <div className="border border-slate-200 bg-slate-50 rounded-2xl p-5">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
                   Editing — Week {s.week_number}
                 </p>
                 <div className="grid grid-cols-2 gap-3 mb-4">
@@ -646,7 +652,7 @@ function SessionsTab({ courseId }) {
                         setEditData((p) => ({ ...p, topic: e.target.value }))
                       }
                       placeholder="e.g. Chapter 3: Sorting Algorithms"
-                      className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-slate-200"
                     />
                   </div>
                   <div>
@@ -659,7 +665,7 @@ function SessionsTab({ courseId }) {
                         setEditData((p) => ({ ...p, room: e.target.value }))
                       }
                       placeholder="e.g. M22"
-                      className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-slate-200"
                     />
                   </div>
                 </div>
@@ -672,7 +678,7 @@ function SessionsTab({ courseId }) {
                   </button>
                   <button
                     onClick={() => setSaveConfirm(s)}
-                    className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2.5 rounded-xl bg-slate-700 text-white text-sm font-bold hover:bg-slate-800 transition flex items-center justify-center gap-1.5"
                   >
                     <FiCheck size={13} /> Save Changes
                   </button>
@@ -715,7 +721,7 @@ function SessionsTab({ courseId }) {
                 <div className="flex gap-1.5 shrink-0">
                   <button
                     onClick={() => startEdit(s)}
-                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                    className="p-2 text-gray-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition"
                     title="Edit"
                   >
                     <FiEdit size={15} />
@@ -764,13 +770,12 @@ function SessionsTab({ courseId }) {
           </div>
         </ConfirmModal>
       )}
-
       {deleteConfirm && (
         <ConfirmModal
           title="Delete this session?"
+          danger
           message={`Week ${deleteConfirm.week_number}${deleteConfirm.topic ? ` · ${deleteConfirm.topic}` : ""} — All attendance records will be permanently deleted.`}
           confirmLabel="Delete"
-          danger
           onConfirm={handleDelete}
           onCancel={() => setDeleteConfirm(null)}
         />
@@ -779,11 +784,12 @@ function SessionsTab({ courseId }) {
   );
 }
 
-function StudentsTab({ courseId }) {
+function StudentsTab({ courseId, courseName, courseCode }) {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [removeConfirm, setRemoveConfirm] = useState(null);
+
   const [enrollEmail, setEnrollEmail] = useState("");
   const [enrolling, setEnrolling] = useState(false);
   const [enrollError, setEnrollError] = useState("");
@@ -792,8 +798,8 @@ function StudentsTab({ courseId }) {
   const fetchStudents = useCallback(() => {
     setLoading(true);
     api
-      .get(`/courses/${courseId}/students`)
-      .then((r) => setStudents(r.data))
+      .get(`/admin/courses/${courseId}/students`)
+      .then((r) => setStudents(r.data || []))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [courseId]);
@@ -820,14 +826,14 @@ function StudentsTab({ courseId }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `students_course_${courseId}.csv`;
+    a.download = `students_${courseCode}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const handleRemove = async () => {
     try {
-      await api.delete(`/courses/${courseId}/students/${removeConfirm.id}`);
+      await api.delete(`/admin/courses/${courseId}/enroll/${removeConfirm.id}`);
       setStudents((prev) => prev.filter((s) => s.id !== removeConfirm.id));
       setRemoveConfirm(null);
     } catch (err) {
@@ -841,7 +847,7 @@ function StudentsTab({ courseId }) {
     setEnrollError("");
     setEnrollSuccess("");
     try {
-      const res = await api.post(`/courses/${courseId}/students/enroll`, {
+      const res = await api.post(`/admin/courses/${courseId}/enroll`, {
         student_email: enrollEmail.trim(),
       });
       setEnrollSuccess(res.data.message || "Student enrolled successfully");
@@ -855,14 +861,14 @@ function StudentsTab({ courseId }) {
   };
 
   return (
-    <div>
-      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-5">
+    <div className="space-y-5">
+      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
-            <FiSearch size={13} />
+          <div className="w-7 h-7 rounded-lg bg-slate-700 text-white flex items-center justify-center shrink-0">
+            <FiUserPlus size={13} />
           </div>
-          <p className="text-sm font-bold text-blue-700">
-            Add student by email
+          <p className="text-sm font-bold text-slate-700">
+            Enroll student by email
           </p>
         </div>
         <div className="flex gap-2">
@@ -876,18 +882,18 @@ function StudentsTab({ courseId }) {
               setEnrollSuccess("");
             }}
             onKeyDown={(e) => e.key === "Enter" && handleEnroll()}
-            className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="flex-1 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-slate-200"
           />
           <button
             onClick={handleEnroll}
             disabled={enrolling || !enrollEmail.trim()}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >
             {enrolling ? (
               <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
             ) : (
               <>
-                <FiCheckCircle size={13} /> Add
+                <FiUserPlus size={13} /> Enroll
               </>
             )}
           </button>
@@ -905,14 +911,14 @@ function StudentsTab({ courseId }) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex gap-3 mb-5">
+      <div className="flex gap-3">
         <div className="relative flex-1 max-w-sm">
           <FiSearch className="absolute left-3 top-3 text-gray-400" size={14} />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by ID or name..."
-            className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-slate-200"
           />
         </div>
         <button
@@ -948,7 +954,6 @@ function StudentsTab({ courseId }) {
                 <th className="pb-3 pl-4 w-12 text-center">No.</th>
                 <th className="pb-3 pl-4">Student ID</th>
                 <th className="pb-3">Name</th>
-                <th className="pb-3 text-gray-400">Email</th>
                 <th className="pb-3 text-center w-20">Action</th>
               </tr>
             </thead>
@@ -966,13 +971,12 @@ function StudentsTab({ courseId }) {
                   </td>
                   <td>
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center font-bold text-xs shrink-0">
                         {s.name.charAt(0).toUpperCase()}
                       </div>
                       <span className="font-bold text-gray-800">{s.name}</span>
                     </div>
                   </td>
-                  <td className="text-gray-400 text-xs">{s.email}</td>
                   <td className="text-center">
                     <button
                       onClick={() => setRemoveConfirm(s)}
@@ -992,9 +996,9 @@ function StudentsTab({ courseId }) {
       {removeConfirm && (
         <ConfirmModal
           title="Remove student?"
-          message={`Remove ${removeConfirm.name} from this course? Their attendance records will be kept.`}
-          confirmLabel="Remove"
           danger
+          message={`Remove ${removeConfirm.name} (${removeConfirm.student_id}) from this course? Their attendance records will be kept.`}
+          confirmLabel="Remove"
           onConfirm={handleRemove}
           onCancel={() => setRemoveConfirm(null)}
         />

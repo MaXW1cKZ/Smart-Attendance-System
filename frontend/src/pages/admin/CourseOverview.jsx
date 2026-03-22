@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import api from "../../api/axios";
 import Sidebar from "../../components/Sidebar";
+import { useNavigate } from "react-router-dom";
 import {
   FiBook,
   FiSearch,
@@ -11,11 +12,13 @@ import {
   FiCheck,
   FiRefreshCw,
   FiCalendar,
+  FiSettings,
 } from "react-icons/fi";
 
 const PAGE_SIZE = 12;
 
 export default function CourseOverview() {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -199,6 +202,15 @@ export default function CourseOverview() {
                           </td>
                           <td className="text-center py-4">
                             <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() =>
+                                  navigate(`/admin/courses/${c.id}`)
+                                }
+                                className="p-2 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 transition"
+                                title="Manage course"
+                              >
+                                <FiSettings size={14} />
+                              </button>
                               <button
                                 onClick={() => {
                                   setEnrollModal(c);

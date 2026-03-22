@@ -44,7 +44,7 @@ const EnrolledStudents = () => {
 
       <main className="flex-1 overflow-y-auto">
         {/* Gradient Header */}
-        <div className="bg-gradient-to-r from-blue-700 to-slate-800 h-64 relative px-10 pt-10 pb-24">
+        <div className="bg-gradient-to-r from-blue-700 to-slate-900 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10">
             <button
               onClick={() => navigate(-1)}
