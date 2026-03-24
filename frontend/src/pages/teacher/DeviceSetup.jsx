@@ -30,6 +30,14 @@ const DeviceSetup = () => {
   const [selectedDevice, setSelectedDevice] = useState("");
   const [topic, setTopic] = useState("");
 
+  // ✅ ประกาศ todayStr ตรงนี้ (บนสุดของ Component) เพื่อให้ทั้งไฟล์มองเห็นและไม่ Error
+  const todayStr = currentTime.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
   // Clock
   useEffect(() => {
     const t = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -76,33 +84,32 @@ const DeviceSetup = () => {
         room: selectedRoom,
       });
 
-      const { session_id, week_number, course_name, course_code } = res.data;
+      const { session_id } = res.data;
 
       localStorage.setItem("active_session_id", String(session_id));
       window.dispatchEvent(new Event("storage"));
 
-      navigate(`/teacher/session/${session_id}/live`, {
-        state: {
-          courseName: course_name,
-          courseCode: course_code,
-          weekNumber: week_number,
-          deviceId: selectedDevice,
-          room: selectedRoom,
-        },
-      });
+      // ❌ ไม่ใช้ state อีกต่อไปแล้ว ตามที่เราคุยกัน
+      navigate(`/teacher/session/${session_id}/live`);
     } catch (err) {
-      setError(err.response?.data?.detail || "An error occurred");
+      // ✅ ดักจับ 400 จาก Backend (กรณีมี Session ค้างอยู่)
+      const detail = err.response?.data?.detail;
+
+      if (err.response?.status === 400 && detail?.active_session_id) {
+        const activeId = detail.active_session_id;
+        localStorage.setItem("active_session_id", String(activeId));
+        window.dispatchEvent(new Event("storage"));
+
+        // พากลับเข้าห้องเรียนเก่าทันที!
+        navigate(`/teacher/session/${activeId}/live`);
+      } else {
+        // ถ้าเป็น Error อื่นๆ ก็แสดงผลไปตามปกติ
+        setError(detail?.message || detail || "An error occurred");
+      }
     } finally {
       setLoading(false);
     }
   };
-
-  const todayStr = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
 
   return (
     <div className="flex h-screen bg-[#F3F4F6] font-sans">

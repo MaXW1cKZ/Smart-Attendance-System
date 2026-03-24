@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import delete
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.users import User
@@ -10,7 +11,6 @@ import numpy as np
 import base64
 import io
 from PIL import Image
-import insightface
 from insightface.app import FaceAnalysis
 
 router = APIRouter()
@@ -18,19 +18,18 @@ router = APIRouter()
 # โหลด InsightFace model ครั้งเดียวตอน startup
 _face_app = None
 
+
 def get_face_app():
     global _face_app
     if _face_app is None:
-        _face_app = FaceAnalysis(
-            name="buffalo_sc",  # model เบา รองรับ CPU ไม่ต้องการ AVX
-            providers=["CPUExecutionProvider"]
-        )
+        # ใช้ buffalo_sc: model เบา รองรับ CPU ไม่ต้องการ AVX
+        _face_app = FaceAnalysis(name="buffalo_sc", providers=["CPUExecutionProvider"])
         _face_app.prepare(ctx_id=-1, det_size=(640, 640))
     return _face_app
 
 
 class FaceRegisterRequest(BaseModel):
-    image: str  # Base64 string
+    images: list[str]
 
 
 def base64_to_image(base64_string: str) -> np.ndarray:
@@ -39,8 +38,7 @@ def base64_to_image(base64_string: str) -> np.ndarray:
     image_data = base64.b64decode(base64_string)
     image = Image.open(io.BytesIO(image_data)).convert("RGB")
     # InsightFace ต้องการ BGR
-    img_array = np.array(image)
-    return img_array[:, :, ::-1]
+    return np.array(image)[:, :, ::-1]
 
 
 @router.post("/student/register-face")
@@ -50,35 +48,40 @@ async def register_face(
     current_user: User = Depends(get_current_user),
 ):
     try:
-        img_bgr = base64_to_image(req.image)
         face_app = get_face_app()
-        faces = face_app.get(img_bgr)
+        all_embeddings = []
 
-        if not faces:
-            raise HTTPException(status_code=400, detail="ไม่พบใบหน้าในรูปภาพ")
+        for img_base64 in req.images:
+            img_bgr = base64_to_image(img_base64)
+            faces = face_app.get(img_bgr)
 
-        # เอา embedding ของหน้าแรก (512 มิติ เหมือน ArcFace เดิม)
-        face_vector = faces[0].normed_embedding.tolist()
+            if faces:
+                all_embeddings.append(faces[0].normed_embedding)
 
-        result = await db.execute(
-            select(FaceEmbedding).where(FaceEmbedding.user_id == current_user.id)
+        if not all_embeddings:
+            raise HTTPException(status_code=400, detail="ไม่พบใบหน้าในรูปภาพที่ส่งมา")
+
+        # หาค่าเฉลี่ยของ embedding จากหลายๆ มุม เพื่อความแม่นยำที่มากขึ้น (Multi-View)
+        mean_vector = np.mean(all_embeddings, axis=0)
+        final_vector = (mean_vector / np.linalg.norm(mean_vector)).tolist()
+
+        # ลบข้อมูลเก่าออก (ถ้ามี) แล้วแทนที่ด้วยข้อมูลใหม่
+        await db.execute(
+            delete(FaceEmbedding).where(FaceEmbedding.user_id == current_user.id)
         )
-        existing_face = result.scalars().first()
 
-        if existing_face:
-            existing_face.embedding_vector = face_vector
-            message = "อัปเดตข้อมูลใบหน้าเรียบร้อยแล้ว"
-        else:
-            new_face = FaceEmbedding(
-                user_id=current_user.id,
-                embedding_vector=face_vector,
-                model_name="ArcFace-InsightFace",
-            )
-            db.add(new_face)
-            message = "ลงทะเบียนใบหน้าสำเร็จ"
-
+        new_face = FaceEmbedding(
+            user_id=current_user.id,
+            embedding_vector=final_vector,
+            model_name="ArcFace-InsightFace-MultiView",
+        )
+        db.add(new_face)
         await db.commit()
-        return {"status": "success", "message": message}
+
+        return {
+            "status": "success",
+            "message": f"ลงทะเบียนสำเร็จด้วยการประมวลผลจาก {len(all_embeddings)} รูปภาพ",
+        }
 
     except HTTPException:
         raise

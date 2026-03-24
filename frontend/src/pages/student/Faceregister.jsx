@@ -136,11 +136,12 @@ const FaceRegister = () => {
     setIsUploading(true);
     setErrorMsg("");
     try {
-      const bestImage = imagesRef.current[0] || lastImage;
-
-      await api.post("/student/register-face", { image: bestImage });
-
-
+      const token = localStorage.getItem("token");
+      await axios.post(
+        "http://localhost:8000/student/register-face",
+        { images: imagesRef.current },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
       setIsSuccess(true);
     } catch (error) {
       setErrorMsg(

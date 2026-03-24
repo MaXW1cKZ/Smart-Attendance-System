@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import api from "../api/axios";
 import {
   FiHome,
   FiBook,
@@ -30,14 +31,30 @@ const Sidebar = () => {
 
   const [activeSessionId, setActiveSessionId] = useState(null);
   useEffect(() => {
-    const check = () =>
-      setActiveSessionId(localStorage.getItem("active_session_id"));
-    check();
-    window.addEventListener("storage", check);
-    return () => window.removeEventListener("storage", check);
-  }, [location]);
+    const checkActiveSession = async () => {
+      try {
+        console.log("Checking session..."); // ดักดูว่าฟังก์ชันรันไหม
 
-  /* close drawer on route change */
+        // อย่าลืม import api ไว้บนสุดของไฟล์ด้วยนะครับ!
+        const res = await api.get("sessions/active");
+        console.log("Session API Response:", res.data); // ดูค่าที่ Backend ส่งมา
+
+        if (res.data && res.data.active) {
+          setActiveSessionId(res.data.session_id);
+        } else {
+          setActiveSessionId(null); // เคลียร์ค่าถ้าไม่มี session
+        }
+      } catch (err) {
+        console.error("Session check failed:", err); // เปลี่ยนให้ปริ้นท์ err ออกมาดูด้วย
+        setActiveSessionId(null);
+      }
+    };
+
+    // รันเช็คเฉพาะตอนเป็น teacher ก็ได้ครับ จะได้ประหยัด Request
+    if (role === "teacher") {
+      checkActiveSession();
+    }
+  }, [location.pathname, role]);
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);

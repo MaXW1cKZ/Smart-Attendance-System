@@ -17,9 +17,7 @@ from datetime import datetime
 from app.api.face_register import get_face_app
 
 router = APIRouter()
-
-COSINE_THRESHOLD = 0.35
-
+COSINE_THRESHOLD = 0.7
 
 
 def base64_to_image(base64_string: str) -> np.ndarray:
@@ -28,10 +26,12 @@ def base64_to_image(base64_string: str) -> np.ndarray:
     image_data = base64.b64decode(base64_string)
     image = Image.open(io.BytesIO(image_data)).convert("RGB")
     img_array = np.array(image)
-    return img_array[:, :, ::-1]  # RGB → BGR
+    return img_array[:, :, ::-1]
 
 
 def cosine_similarity(v1, v2) -> float:
+    v1 = np.array(v1)
+    v2 = np.array(v2)
     n1, n2 = np.linalg.norm(v1), np.linalg.norm(v2)
     if n1 == 0 or n2 == 0:
         return 0.0
@@ -92,73 +92,64 @@ async def recognize_student(
             faces = face_app.get(img_bgr)
             if not faces:
                 return {"status": "unknown", "message": "No face detected"}
-            input_vector = np.array(faces[0].normed_embedding)
+            input_vector = faces[0].normed_embedding
         except Exception as e:
             return {"status": "unknown", "message": f"Face detection failed: {str(e)}"}
 
-        result = await db.execute(select(FaceEmbedding))
-        all_faces = result.scalars().all()
-
-        if not all_faces:
-            return {"status": "error", "message": "No registered faces in database"}
-
-        best_user_id = None
-        best_similarity = -1.0
-
-        for face in all_faces:
-            sim = cosine_similarity(input_vector, np.array(face.embedding_vector))
-            if sim > best_similarity:
-                best_similarity = sim
-                best_user_id = face.user_id
-
-        if best_user_id is None or best_similarity < COSINE_THRESHOLD:
-            return {"status": "unknown", "message": "Face not recognized"}
-
-        student = await db.get(User, best_user_id)
-        if not student:
-            return {"status": "error", "message": "User not found in database"}
-
-        enrollment_check = await db.execute(
-            select(Enrollment).where(
-                Enrollment.course_id == session.course_id,
-                Enrollment.student_id == student.id,
-            )
+        # ดึงข้อมูลเฉพาะใบหน้าของนักศึกษาที่ลงทะเบียนในคลาสนี้
+        stmt = (
+            select(User, FaceEmbedding)
+            .join(FaceEmbedding, User.id == FaceEmbedding.user_id)
+            .join(Enrollment, User.id == Enrollment.student_id)
+            .where(Enrollment.course_id == session.course_id)
         )
-        is_enrolled = enrollment_check.scalars().first()
+        result = await db.execute(stmt)
+        candidates = result.all()
 
-        if not is_enrolled:
+        if not candidates:
             return {
                 "status": "error",
-                "message": f"Student {student.full_name} is not enrolled in this course.",
+                "message": "No students registered for this course have face data",
             }
+
+        best_user = None
+        best_similarity = -1.0
+
+        for user_obj, face_obj in candidates:
+            sim = cosine_similarity(input_vector, face_obj.embedding_vector)
+            if sim > best_similarity:
+                best_similarity = sim
+                best_user = user_obj
+
+        if best_user is None or best_similarity < COSINE_THRESHOLD:
+            return {"status": "unknown", "message": "Face not recognized"}
 
         existing = await db.execute(
             select(Attendance).where(
                 Attendance.session_id == req.session_id,
-                Attendance.student_id == student.id,
+                Attendance.student_id == best_user.id,
             )
         )
         already_checked = existing.scalars().first()
 
         if not already_checked:
-            db.add(
-                Attendance(
-                    student_id=student.id,
-                    session_id=req.session_id,
-                    status=computed_status,
-                    timestamp=now,
-                    confidence_score=int(best_similarity * 100),
-                )
+            new_attendance = Attendance(
+                student_id=best_user.id,
+                session_id=req.session_id,
+                status=computed_status,
+                timestamp=now,
+                confidence_score=int(best_similarity * 100),
             )
+            db.add(new_attendance)
             await db.commit()
 
         return {
             "status": "detected",
             "already_recorded": already_checked is not None,
             "student": {
-                "id": student.id,
-                "name": student.full_name,
-                "student_id": getattr(student, "student_id", str(student.id)),
+                "id": best_user.id,
+                "name": best_user.full_name,
+                "student_id": getattr(best_user, "student_id", str(best_user.id)),
                 "confidence": round(best_similarity * 100, 2),
                 "status": computed_status.value if computed_status else "present",
             },
