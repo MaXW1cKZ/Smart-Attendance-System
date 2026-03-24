@@ -139,7 +139,7 @@ const FaceRegister = () => {
       const token = localStorage.getItem("token");
       await axios.post(
         "http://localhost:8000/student/register-face",
-        { image: imagesRef.current[0] },
+        { images: imagesRef.current },
         { headers: { Authorization: `Bearer ${token}` } },
       );
       setIsSuccess(true);

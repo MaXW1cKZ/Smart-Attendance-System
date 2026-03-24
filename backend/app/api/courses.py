@@ -263,7 +263,11 @@ async def start_new_session(
     if existing:
         raise HTTPException(
             status_code=400,
-            detail=f"Session #{existing.id} is still live. Please end it first.",
+            # แนบ active_session_id ไปใน detail
+            detail={
+                "message": f"Session #{existing.id} is still live. Redirecting...",
+                "active_session_id": existing.id,
+            },
         )
 
     # Auto-increment week number
@@ -425,11 +429,26 @@ async def get_active_session(
     stmt = (
         select(ClassSession)
         .join(Course)
-        .where(ClassSession.is_active == True, Course.teacher_id == current_user.id)
+        .options(selectinload(ClassSession.course))
+        .where(
+            ClassSession.is_active == True,
+            Course.teacher_id == current_user.id,
+        )
+        .order_by(ClassSession.id.desc())
     )
     result = await db.execute(stmt)
     session = result.scalars().first()
-    return session
+
+    if not session:
+        return {"active": False}
+
+    return {
+        "active": True,
+        "session_id": session.id,
+        "course_name": session.course.name,
+        "course_code": session.course.course_code,
+        "topic": session.topic,
+    }
 
 
 @router.get("/sessions/{session_id}/attendance")

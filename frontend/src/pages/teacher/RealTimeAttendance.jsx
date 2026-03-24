@@ -35,36 +35,43 @@ const RealTimeAttendance = () => {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
 
-  const deviceId = location.state?.deviceId;
-  const room = location.state?.room;
-  const courseName = location.state?.courseName || "";
-  const courseCode = location.state?.courseCode || "";
-  const weekNumber = location.state?.weekNumber || "";
+  const deviceId = location.state?.deviceId || "";
+  const room = location.state?.room || sessionInfo?.room || "";
+  const courseName = courseInfo?.name || "Loading Course...";
+  const courseCode = courseInfo?.course_code || "";
+  const weekNumber = sessionInfo?.week_number || "";
 
-  // Tell Sidebar there's an active session
   useEffect(() => {
-    localStorage.setItem("active_session_id", sessionId);
-    window.dispatchEvent(new Event("storage"));
+    const fetchSessionData = async () => {
+      try {
+        const sessionRes = await api.get(`/sessions/${sessionId}`);
+        setSessionInfo(sessionRes.data);
+        const attendanceRes = await api.get(
+          `/sessions/${sessionId}/attendance`,
+        );
+        setLogs(attendanceRes.data);
+      } catch (err) {
+        console.error("Cannot resume session", err);
+      }
+    };
+
+    if (sessionId) fetchSessionData();
   }, [sessionId]);
 
-  // Fetch existing attendance + session info on mount (handles page refresh)
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        // Fetch attendance records for this session
         const attRes = await api.get(`/sessions/${sessionId}/attendance`);
         const data = attRes.data;
 
         if (data.session) setSessionInfo(data.session);
         if (data.course) setCourseInfo(data.course);
 
-        // Restore existing logs
         const existingLogs = (data.records || [])
-          .filter((r) => r.status !== "absent") // Only show checked-in students
+          .filter((r) => r.status !== "absent")
           .map((att) => ({
             id: att.attendance_id,
             student_name: att.name,
-            // ดึง student_id จาก email โดยตัดส่วน @... ออก ถ้าไม่มีให้ fallback ไปใช้ student_id เดิม
             display_id: att.email ? att.email.split("@")[0] : att.student_id,
             time: att.timestamp
               ? new Date(att.timestamp).toLocaleTimeString("en-US", {
@@ -87,7 +94,6 @@ const RealTimeAttendance = () => {
     fetchInitialData();
   }, [sessionId, navigate]);
 
-  // Load face-api model
   useEffect(() => {
     const loadModels = async () => {
       const MODEL_URL = "/models";
@@ -103,7 +109,6 @@ const RealTimeAttendance = () => {
     loadModels();
   }, []);
 
-  // Fire check-in API
   const handleCheckIn = useCallback(async () => {
     if (isProcessingRef.current || !webcamRef.current) return;
 
@@ -123,10 +128,8 @@ const RealTimeAttendance = () => {
         const student = res.data.student;
         setStatusLabel(`✓ ${student.name}`);
 
-        // Only add to log if not already_recorded
         if (!res.data.already_recorded) {
           setLogs((prev) => {
-            // Check against either display_id or DB student_id to prevent duplicates
             const currentDisplayId = student.email
               ? student.email.split("@")[0]
               : student.student_id;
@@ -143,8 +146,8 @@ const RealTimeAttendance = () => {
               {
                 id: Date.now(),
                 student_name: student.name,
-                student_id: student.student_id, // raw ID just in case
-                display_id: currentDisplayId, // ID from email
+                student_id: student.student_id,
+                display_id: currentDisplayId,
                 time: new Date().toLocaleTimeString("en-US", { hour12: false }),
                 confidence: student.confidence
                   ? student.confidence / 100
@@ -171,7 +174,6 @@ const RealTimeAttendance = () => {
     }
   }, [sessionId]);
 
-  // Main detection loop — beautiful corner bracket drawing
   useEffect(() => {
     if (!isModelLoaded) return;
 
@@ -209,20 +211,17 @@ const RealTimeAttendance = () => {
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, displaySize.width, displaySize.height);
 
-      // Draw corner bracket boxes
       resized.forEach((detection) => {
         const { x, y, width, height } = detection.box;
         const boxColor = isProcessingRef.current ? "#f59e0b" : "#22c55e";
         const cornerLen = 16;
 
-        // Thin border
         ctx.strokeStyle = boxColor;
         ctx.lineWidth = 1.5;
         ctx.globalAlpha = 0.4;
         ctx.strokeRect(x, y, width, height);
         ctx.globalAlpha = 1;
 
-        // Corner brackets
         ctx.lineWidth = 3;
         ctx.strokeStyle = boxColor;
         [
@@ -245,7 +244,6 @@ const RealTimeAttendance = () => {
           ctx.stroke();
         });
 
-        // Label pill
         const label = isProcessingRef.current
           ? "Processing..."
           : "Face Detected";
@@ -268,14 +266,12 @@ const RealTimeAttendance = () => {
     return () => clearInterval(interval);
   }, [isModelLoaded, handleCheckIn]);
 
-  // End session — call API, mark absentees, redirect to dashboard
   const handleStopSession = async () => {
     setEndingSession(true);
     isSessionActiveRef.current = false;
     setIsSessionActive(false);
     setStatusLabel("Session Ended");
 
-    // Clear canvas
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");

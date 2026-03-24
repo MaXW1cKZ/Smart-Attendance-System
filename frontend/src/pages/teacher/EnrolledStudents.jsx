@@ -66,10 +66,8 @@ const EnrolledStudents = () => {
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none"></div>
         </div>
 
-        {/* Floating Content Container */}
         <div className="px-10 -mt-20 pb-10 relative z-20">
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 min-h-[600px] flex flex-col">
-            {/* Toolbar */}
             <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
               <h2 className="text-xl font-bold text-gray-800">Student List</h2>
               <div className="flex gap-3 w-full md:w-auto">
@@ -86,7 +84,6 @@ const EnrolledStudents = () => {
               </div>
             </div>
 
-            {/* Table */}
             <div className="overflow-x-auto flex-1">
               {loading ? (
                 <div className="flex justify-center items-center h-64 text-gray-400 font-medium">
