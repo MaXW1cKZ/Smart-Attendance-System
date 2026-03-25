@@ -41,6 +41,18 @@ def base64_to_image(base64_string: str) -> np.ndarray:
     return np.array(image)[:, :, ::-1]
 
 
+# ==========================================
+# 🛡️ ด่านดักจับรูปปลอม (Anti-Spoofing)
+# ==========================================
+def check_liveness_minifasnet(img_bgr: np.ndarray) -> dict:
+    """
+    TODO: อนาคตนำโมเดล MiniFASNet (.pth) มาโหลดและ inference ตรงนี้
+    ตอนนี้จะจำลองว่าให้ผ่าน (True)
+    💡 ถ้าอยากทดสอบว่าระบบบล็อคคนเอารูปมาสแกนได้ไหม ให้ลองแก้ "is_real": False ดูครับ
+    """
+    return {"is_real": True, "score": 0.98, "message": "Real face detected"}
+
+
 @router.post("/student/register-face")
 async def register_face(
     req: FaceRegisterRequest,
@@ -53,6 +65,16 @@ async def register_face(
 
         for img_base64 in req.images:
             img_bgr = base64_to_image(img_base64)
+
+            # --- 🛡️ ตรวจสอบว่าเป็นคนจริงหรือไม่ ก่อนส่งให้ InsightFace ---
+            liveness_result = check_liveness_minifasnet(img_bgr)
+            if not liveness_result["is_real"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="ตรวจพบการใช้รูปภาพหรือหน้าจอ (Spoofing)! กรุณาใช้ใบหน้าจริงในการลงทะเบียน",
+                )
+            # --------------------------------------------------------
+
             faces = face_app.get(img_bgr)
 
             if faces:

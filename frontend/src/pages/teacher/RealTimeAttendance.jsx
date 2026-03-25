@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import Webcam from "react-webcam";
-import * as faceapi from "face-api.js";
-import api from "../../api/axios"; // ✅ ใช้ api interceptor (auto token, base URL)
+import Human from "@vladmandic/human";
+import api from "../../api/axios";
 import {
   FiUsers,
   FiCheckCircle,
@@ -23,6 +23,8 @@ const RealTimeAttendance = () => {
   const canvasRef = useRef(null);
   const isProcessingRef = useRef(false);
   const isSessionActiveRef = useRef(true);
+  const wsRef = useRef(null);
+  const humanRef = useRef(null);
 
   const [logs, setLogs] = useState([]);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
@@ -41,25 +43,41 @@ const RealTimeAttendance = () => {
   const courseCode = courseInfo?.course_code || "";
   const weekNumber = sessionInfo?.week_number || "";
 
+  // 1. โหลดโมเดล Human
   useEffect(() => {
-    const fetchSessionData = async () => {
+    const loadHumanModel = async () => {
       try {
-        const sessionRes = await api.get(`/sessions/${sessionId}`);
-        setSessionInfo(sessionRes.data);
-        const attendanceRes = await api.get(
-          `/sessions/${sessionId}/attendance`,
-        );
-        setLogs(attendanceRes.data);
-      } catch (err) {
-        console.error("Cannot resume session", err);
+        const human = new Human({
+          modelBasePath: "https://vladmandic.github.io/human-models/models",
+          face: {
+            enabled: true,
+            detector: { rotation: true, maxDetected: 10 },
+            mesh: { enabled: false },
+            iris: { enabled: false },
+            description: { enabled: false },
+            emotion: { enabled: false },
+            liveness: { enabled: false },
+          },
+          body: { enabled: false },
+          hand: { enabled: false },
+          object: { enabled: false },
+          gesture: { enabled: false },
+        });
+
+        await human.load();
+        humanRef.current = human;
+        setIsModelLoaded(true);
+        setStatusLabel("Connecting to server...");
+      } catch (error) {
+        console.error("Failed to load Human model:", error);
+        setStatusLabel("Model load failed");
       }
     };
-
-    if (sessionId) fetchSessionData();
-  }, [sessionId]);
+    loadHumanModel();
+  }, []);
 
   useEffect(() => {
-    const fetchInitialData = async () => {
+    const fetchSessionData = async () => {
       try {
         const attRes = await api.get(`/sessions/${sessionId}/attendance`);
         const data = attRes.data;
@@ -70,8 +88,8 @@ const RealTimeAttendance = () => {
         const existingLogs = (data.records || [])
           .filter((r) => r.status !== "absent")
           .map((att) => ({
-            id: att.attendance_id,
-            student_name: att.name,
+            id: att.attendance_id || Math.random(),
+            student_name: att.name || "Unknown",
             display_id: att.email ? att.email.split("@")[0] : att.student_id,
             time: att.timestamp
               ? new Date(att.timestamp).toLocaleTimeString("en-US", {
@@ -85,62 +103,54 @@ const RealTimeAttendance = () => {
           }));
         setLogs(existingLogs);
       } catch (err) {
-        console.error("Fetch initial data error:", err);
+        console.error("Error fetching session:", err);
       } finally {
         setIsFetchingAttendance(false);
       }
     };
+    if (sessionId) fetchSessionData();
+  }, [sessionId]);
 
-    fetchInitialData();
-  }, [sessionId, navigate]);
-
+  // 3. เชื่อมต่อ WebSocket (รันเมื่อโมเดลโหลดเสร็จ)
   useEffect(() => {
-    const loadModels = async () => {
-      const MODEL_URL = "/models";
-      try {
-        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-        setIsModelLoaded(true);
-        setStatusLabel("Scanning...");
-      } catch (e) {
-        setStatusLabel("Model load failed");
-        console.error("Model load error:", e);
-      }
+    if (!sessionId || !isModelLoaded) return;
+
+    const token =
+      localStorage.getItem("token") ||
+      localStorage.getItem("access_token") ||
+      "";
+    const wsUrl = `ws://localhost:8000/attendance/ws/${sessionId}?token=${token}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log("✅ WebSocket Connected");
+      setStatusLabel("System Ready. Scanning...");
     };
-    loadModels();
-  }, []);
 
-  const handleCheckIn = useCallback(async () => {
-    if (isProcessingRef.current || !webcamRef.current) return;
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
 
-    isProcessingRef.current = true;
-    setStatusLabel("Processing...");
-
-    try {
-      const imageSrc = webcamRef.current.getScreenshot();
-      if (!imageSrc) return;
-
-      const res = await api.post("/attendance/recognize", {
-        session_id: parseInt(sessionId),
-        image: imageSrc,
-      });
-
-      if (res.data.status === "detected") {
-        const student = res.data.student;
+      if (data.status === "detected") {
+        const student = data.student;
         setStatusLabel(`✓ ${student.name}`);
 
-        if (!res.data.already_recorded) {
+        if (!data.already_recorded) {
           setLogs((prev) => {
             const currentDisplayId = student.email
               ? student.email.split("@")[0]
               : student.student_id;
+
+            // ป้องกันการใส่ข้อมูลซ้ำ
             if (
               prev.find(
                 (l) =>
                   l.display_id === currentDisplayId ||
                   l.student_id === student.student_id,
               )
-            )
+            ) {
               return prev;
+            }
 
             return [
               {
@@ -158,15 +168,63 @@ const RealTimeAttendance = () => {
             ];
           });
         }
-      } else if (res.data.status === "unknown") {
+      } else if (data.status === "unknown") {
         setStatusLabel("Unknown face");
+      } else if (data.status === "locked") {
+        setStatusLabel("Check-in Closed");
       } else {
         setStatusLabel("No face matched");
       }
+
+      // ปลดล็อคสถานะการประมวลผล
+      setTimeout(() => {
+        isProcessingRef.current = false;
+        if (isSessionActiveRef.current) setStatusLabel("Scanning...");
+      }, 2000);
+    };
+
+    ws.onerror = (error) => console.error("❌ WebSocket Error:", error);
+    ws.onclose = () => console.log("❌ WebSocket Disconnected");
+
+    return () => {
+      if (
+        ws.readyState === WebSocket.OPEN ||
+        ws.readyState === WebSocket.CONNECTING
+      ) {
+        ws.close();
+      }
+    };
+  }, [sessionId, isModelLoaded]);
+
+  // 4. ฟังก์ชันส่งรูปผ่าน WebSocket
+  const handleCheckIn = useCallback(() => {
+    if (
+      isProcessingRef.current ||
+      !webcamRef.current ||
+      !wsRef.current ||
+      wsRef.current.readyState !== WebSocket.OPEN
+    )
+      return;
+
+    isProcessingRef.current = true;
+    setStatusLabel("Processing...");
+
+    try {
+      const imageSrc = webcamRef.current.getScreenshot();
+      if (!imageSrc) {
+        isProcessingRef.current = false;
+        return;
+      }
+
+      wsRef.current.send(
+        JSON.stringify({
+          session_id: parseInt(sessionId),
+          image: imageSrc,
+        }),
+      );
     } catch (err) {
       console.error("Check-in error:", err);
       setStatusLabel("Error - retrying...");
-    } finally {
       setTimeout(() => {
         isProcessingRef.current = false;
         if (isSessionActiveRef.current) setStatusLabel("Scanning...");
@@ -174,8 +232,9 @@ const RealTimeAttendance = () => {
     }
   }, [sessionId]);
 
+  // 5. Loop สแกนใบหน้าด้วย Human
   useEffect(() => {
-    if (!isModelLoaded) return;
+    if (!isModelLoaded || !humanRef.current) return;
 
     const interval = setInterval(async () => {
       if (
@@ -195,24 +254,17 @@ const RealTimeAttendance = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      faceapi.matchDimensions(canvas, displaySize);
+      canvas.width = displaySize.width;
+      canvas.height = displaySize.height;
 
-      const detections = await faceapi.detectAllFaces(
-        video,
-        new faceapi.TinyFaceDetectorOptions({
-          inputSize: 320,
-          scoreThreshold: 0.5,
-        }),
-      );
-
-      const resized = faceapi.resizeResults(detections, displaySize);
-      setFaceCount(resized.length);
+      const result = await humanRef.current.detect(video);
+      setFaceCount(result.face.length);
 
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, displaySize.width, displaySize.height);
 
-      resized.forEach((detection) => {
-        const { x, y, width, height } = detection.box;
+      result.face.forEach((face) => {
+        const [x, y, width, height] = face.box;
         const boxColor = isProcessingRef.current ? "#f59e0b" : "#22c55e";
         const cornerLen = 16;
 
@@ -258,7 +310,8 @@ const RealTimeAttendance = () => {
         ctx.fillText(label, x + 8, y - 10);
       });
 
-      if (resized.length > 0 && !isProcessingRef.current) {
+      // ถ้าเจอใบหน้า ให้ส่งรูปผ่าน WebSocket
+      if (result.face.length > 0 && !isProcessingRef.current) {
         handleCheckIn();
       }
     }, 800);
@@ -301,7 +354,6 @@ const RealTimeAttendance = () => {
   const videoConstraints = deviceId
     ? { deviceId: { exact: deviceId } }
     : { facingMode: "user" };
-
   const displaySessionId = sessionInfo?.id ?? sessionId;
   const displayCourseCode = courseCode || courseInfo?.course_code || "";
   const displayCourseName = courseName || courseInfo?.name || "";
@@ -355,7 +407,7 @@ const RealTimeAttendance = () => {
               >
                 {endingSession ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />{" "}
                     Ending...
                   </>
                 ) : (
@@ -380,7 +432,6 @@ const RealTimeAttendance = () => {
                 Live Attendance
               </h1>
               <div className="text-blue-100 pl-1 mt-2 space-y-1.5 max-w-3xl">
-                {/* ย้าย Week ขึ้นมาด้านบน และแสดง Fallback กรณีไม่มี Week */}
                 <p className="text-white text-lg font-bold tracking-tight">
                   {displayWeek != null && displayWeek !== ""
                     ? `Week ${displayWeek}`
@@ -398,8 +449,6 @@ const RealTimeAttendance = () => {
                       {displayCourseName && <span>{displayCourseName}</span>}
                     </span>
                   )}
-
-                  {/* แสดง Session เป็นป้ายสลับกับที่ Week เคยอยู่ */}
                   {(displayCourseCode || displayCourseName) && (
                     <span className="text-blue-300/80 hidden sm:inline">·</span>
                   )}
@@ -468,11 +517,7 @@ const RealTimeAttendance = () => {
               <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
                 <div className="flex items-center gap-2 bg-black/60 text-white px-4 py-1.5 rounded-full text-sm backdrop-blur-md">
                   <div
-                    className={`w-2.5 h-2.5 rounded-full ${
-                      isSessionActive
-                        ? "bg-green-400 animate-pulse"
-                        : "bg-red-500"
-                    }`}
+                    className={`w-2.5 h-2.5 rounded-full ${isSessionActive ? "bg-green-400 animate-pulse" : "bg-red-500"}`}
                   />
                   <span className="font-semibold">{statusLabel}</span>
                 </div>
@@ -486,7 +531,6 @@ const RealTimeAttendance = () => {
                 )}
               </div>
 
-              {/* Model loading overlay */}
               {!isModelLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm">
                   <div className="text-center text-white">
@@ -496,7 +540,6 @@ const RealTimeAttendance = () => {
                 </div>
               )}
 
-              {/* Session ended overlay */}
               {!isSessionActive && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                   <div className="text-center text-white">
@@ -523,8 +566,7 @@ const RealTimeAttendance = () => {
             <div className="w-80 bg-white rounded-3xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                 <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                  <FiUsers size={16} className="text-blue-500" />
-                  Checked In
+                  <FiUsers size={16} className="text-blue-500" /> Checked In
                 </h3>
                 <div className="flex items-center gap-2">
                   {isFetchingAttendance && (
@@ -560,28 +602,21 @@ const RealTimeAttendance = () => {
                         <p className="font-bold text-sm text-gray-800 truncate">
                           {log.student_name}
                         </p>
-                        {/* ใช้ display_id ที่สกัดรหัสจาก Email แล้ว */}
                         <p className="text-xs text-gray-400 font-mono">
                           {log.display_id}
                         </p>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <span
-                          className={`flex items-center text-xs gap-1 font-bold ${
-                            log.status === "late"
-                              ? "text-amber-500"
-                              : "text-green-500"
-                          }`}
+                          className={`flex items-center text-xs gap-1 font-bold ${log.status === "late" ? "text-amber-500" : "text-green-500"}`}
                         >
-                          <FiCheckCircle size={12} />
-                          {log.time}
+                          <FiCheckCircle size={12} /> {log.time}
                         </span>
                         {log.status === "late" && (
                           <span className="text-xs text-amber-400 font-medium flex items-center gap-0.5 justify-end mt-0.5">
                             <FiClock size={10} /> Late
                           </span>
                         )}
-                        {/* เพิ่มคำว่า Acc : นำหน้าเปอร์เซ็นต์ */}
                         {log.confidence && (
                           <p className="text-xs text-gray-400 mt-0.5">
                             Acc : {Math.round(log.confidence * 100)}%

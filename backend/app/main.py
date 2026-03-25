@@ -16,7 +16,7 @@ from sqlalchemy import text
 app = FastAPI(title="Smart Attendance API", version="1.0.0")
 
 origins = [
-    "https://smartcheck.it.kmitl.ac.th", #Domain ของ 10.72.0.167
+    "https://smartcheck.it.kmitl.ac.th",  # Domain ของ 10.72.0.167
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]

@@ -131,11 +131,6 @@ export default function TeacherDashboard() {
               </span>
             </div>
           </div>
-          {successMsg && (
-            <div className="absolute bottom-4 left-10 right-10 bg-emerald-500/90 backdrop-blur text-white px-5 py-3 rounded-xl text-sm font-semibold flex items-center gap-2">
-              <FiCheckCircle /> {successMsg}
-            </div>
-          )}
         </div>
 
         <div className="px-10 -mt-24 relative z-10 grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">

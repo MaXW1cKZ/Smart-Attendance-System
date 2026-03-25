@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -12,12 +12,14 @@ from pydantic import BaseModel
 import numpy as np
 import base64
 import io
+import json
 from PIL import Image
 from datetime import datetime
 from app.api.face_register import get_face_app
 
 router = APIRouter()
-COSINE_THRESHOLD = 0.7
+
+COSINE_THRESHOLD = 0.35
 
 
 def base64_to_image(base64_string: str) -> np.ndarray:
@@ -55,48 +57,36 @@ def determine_status(session: ClassSession, course: Course, now: datetime):
         return AttendanceStatus.PRESENT
 
 
-@router.post("/attendance/recognize")
-async def recognize_student(
-    req: CheckInRequest,
+@router.websocket("/attendance/ws/{session_id}")
+async def websocket_attendance(
+    websocket: WebSocket,
+    session_id: int,
+    token: str = None,
     db: AsyncSession = Depends(get_db),
 ):
+    await websocket.accept()
+    face_app = get_face_app()
+
     try:
+        # 🟢 ส่วนที่ 1: เตรียมข้อมูล (ทำแค่ 1 ครั้งตอนเชื่อมต่อ)
         sess_result = await db.execute(
             select(ClassSession)
             .options(selectinload(ClassSession.course))
-            .where(ClassSession.id == req.session_id)
+            .where(ClassSession.id == session_id)
         )
         session = sess_result.scalars().first()
 
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        if not session.is_active:
-            return {"status": "error", "message": "Session is not active"}
+        # ✅ โลจิกเดิม: เช็คคลาสว่ามีและเปิดอยู่ไหม
+        if not session or not session.is_active:
+            await websocket.send_json(
+                {"status": "error", "message": "Session is not active or not found"}
+            )
+            await websocket.close()
+            return
 
         course = session.course
-        now = datetime.now()
-        computed_status = determine_status(session, course, now)
 
-        if computed_status is None:
-            absent_after = course.absent_after_minutes or 60
-            return {
-                "status": "locked",
-                "message": f"Check-in closed — more than {absent_after} minutes have passed",
-            }
-
-        # สร้าง embedding ด้วย InsightFace
-        img_bgr = base64_to_image(req.image)
-        face_app = get_face_app()
-
-        try:
-            faces = face_app.get(img_bgr)
-            if not faces:
-                return {"status": "unknown", "message": "No face detected"}
-            input_vector = faces[0].normed_embedding
-        except Exception as e:
-            return {"status": "unknown", "message": f"Face detection failed: {str(e)}"}
-
-        # ดึงข้อมูลเฉพาะใบหน้าของนักศึกษาที่ลงทะเบียนในคลาสนี้
+        # ✅ โลจิกเดิม: ดึงข้อมูลเฉพาะ "ใบหน้าของนักศึกษาที่ลงทะเบียนในคลาสนี้" เท่านั้น! (ป้องกันคนนอกเนียนเช็คชื่อ)
         stmt = (
             select(User, FaceEmbedding)
             .join(FaceEmbedding, User.id == FaceEmbedding.user_id)
@@ -107,56 +97,102 @@ async def recognize_student(
         candidates = result.all()
 
         if not candidates:
-            return {
-                "status": "error",
-                "message": "No students registered for this course have face data",
-            }
-
-        best_user = None
-        best_similarity = -1.0
-
-        for user_obj, face_obj in candidates:
-            sim = cosine_similarity(input_vector, face_obj.embedding_vector)
-            if sim > best_similarity:
-                best_similarity = sim
-                best_user = user_obj
-
-        if best_user is None or best_similarity < COSINE_THRESHOLD:
-            return {"status": "unknown", "message": "Face not recognized"}
-
-        existing = await db.execute(
-            select(Attendance).where(
-                Attendance.session_id == req.session_id,
-                Attendance.student_id == best_user.id,
+            await websocket.send_json(
+                {
+                    "status": "error",
+                    "message": "No students registered for this course have face data",
+                }
             )
-        )
-        already_checked = existing.scalars().first()
 
-        if not already_checked:
-            new_attendance = Attendance(
-                student_id=best_user.id,
-                session_id=req.session_id,
-                status=computed_status,
-                timestamp=now,
-                confidence_score=int(best_similarity * 100),
+        # ส่วนที่ 2: รับภาพรัวๆ (Real-time Loop)
+        while True:
+            # รับภาพจาก React
+            data = await websocket.receive_text()
+            payload = json.loads(data)
+            img_bgr = base64_to_image(payload["image"])
+
+            now = datetime.now()
+
+            # ✅ โลจิกเดิม: เช็คสาย/ขาด ผ่าน determine_status
+            computed_status = determine_status(session, course, now)
+            if computed_status is None:
+                absent_after = course.absent_after_minutes or 60
+                await websocket.send_json(
+                    {
+                        "status": "locked",
+                        "message": f"Check-in closed — more than {absent_after} minutes have passed",
+                    }
+                )
+                continue  # ข้ามไปรอรูปถัดไป ไม่ต้องตรวจหน้าให้เสียเวลา
+
+            # สร้าง embedding ด้วย InsightFace
+            try:
+                faces = face_app.get(img_bgr)
+                if not faces:
+                    continue  # ไม่เจอหน้า ข้าม
+                input_vector = faces[0].normed_embedding
+            except Exception as e:
+                print(f"Face detection failed: {str(e)}")
+                continue
+
+            # ✅ โลจิกเดิม: หาคนที่หน้าเหมือนที่สุดในคลาส
+            best_user = None
+            best_similarity = -1.0
+
+            for user_obj, face_obj in candidates:
+                sim = cosine_similarity(input_vector, face_obj.embedding_vector)
+                if sim > best_similarity:
+                    best_similarity = sim
+                    best_user = user_obj
+
+            # ✅ โลจิกเดิม: ตัดเกณฑ์ที่ COSINE_THRESHOLD (เช่น 0.35 หรือ 0.70 ตามที่คุณตั้งไว้)
+            if best_user is None or best_similarity < COSINE_THRESHOLD:
+                await websocket.send_json(
+                    {"status": "unknown", "message": "Face not recognized"}
+                )
+                continue
+
+            # ✅ โลจิกเดิม: ตรวจสอบว่าเคยบันทึกไปแล้วหรือยัง
+            existing = await db.execute(
+                select(Attendance).where(
+                    Attendance.session_id == session_id,
+                    Attendance.student_id == best_user.id,
+                )
             )
-            db.add(new_attendance)
-            await db.commit()
+            already_checked = existing.scalars().first()
 
-        return {
-            "status": "detected",
-            "already_recorded": already_checked is not None,
-            "student": {
-                "id": best_user.id,
-                "name": best_user.full_name,
-                "student_id": getattr(best_user, "student_id", str(best_user.id)),
-                "confidence": round(best_similarity * 100, 2),
-                "status": computed_status.value if computed_status else "present",
-            },
-        }
+            if not already_checked:
+                new_attendance = Attendance(
+                    student_id=best_user.id,
+                    session_id=session_id,
+                    status=computed_status,
+                    timestamp=now,
+                    confidence_score=int(best_similarity * 100),
+                )
+                db.add(new_attendance)
+                await db.commit()
 
-    except HTTPException:
-        raise
+            # ส่งกลับไปให้หน้าอาจารย์
+            await websocket.send_json(
+                {
+                    "status": "detected",
+                    "already_recorded": already_checked is not None,
+                    "student": {
+                        "id": best_user.id,
+                        "name": best_user.full_name,
+                        "student_id": getattr(
+                            best_user, "student_id", str(best_user.id)
+                        ),
+                        "email": getattr(best_user, "email", ""),
+                        "confidence": round(best_similarity * 100, 2),
+                        "status": computed_status.value
+                        if hasattr(computed_status, "value")
+                        else computed_status,
+                    },
+                }
+            )
+
+    except WebSocketDisconnect:
+        print(f"อาจารย์ปิดกล้อง (Session ID: {session_id})")
     except Exception as e:
-        print(f"[recognize_student] Error: {e}")
-        return {"status": "error", "message": str(e)}
+        print(f"WebSocket Error: {e}")

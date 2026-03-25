@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import Webcam from "react-webcam";
-import api from "../../api/axios";
-import * as faceapi from "face-api.js"; // Import face-api
+import api from "../../api/axios"; // ✅ ใช้ api ที่คุณ import ไว้
+import Human from "@vladmandic/human"; // ✅ เปลี่ยนมาใช้ Human แทน face-api.js
 import {
   FiCamera,
   FiRefreshCw,
@@ -34,6 +34,22 @@ const STEPS = [
   },
 ];
 
+// ✅ ตั้งค่า Human (เปิดระบบ Liveness)
+const humanConfig = {
+  modelBasePath: "https://vladmandic.github.io/human-models/models",
+  face: {
+    enabled: true,
+    detector: { rotation: true, maxDetected: 1 },
+    mesh: { enabled: true },
+    liveness: { enabled: true }, // เปิดการตรวจจับคนจริง
+  },
+  body: { enabled: false },
+  hand: { enabled: false },
+  object: { enabled: false },
+};
+
+const human = new Human(humanConfig);
+
 const FaceRegister = () => {
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
@@ -47,13 +63,15 @@ const FaceRegister = () => {
   const [faceDetected, setFaceDetected] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // ✅ โหลด Model ของ Human
   useEffect(() => {
-    faceapi.nets.tinyFaceDetector
-      .loadFromUri("/models")
+    human
+      .load()
       .then(() => setIsModelLoaded(true))
       .catch((err) => console.error("Failed to load models:", err));
   }, []);
 
+  // ✅ ระบบตรวจจับใบหน้าและวาดกรอบ (แทนที่ face-api.js)
   useEffect(() => {
     if (!isModelLoaded) return;
     const interval = setInterval(async () => {
@@ -65,47 +83,53 @@ const FaceRegister = () => {
         width: video.videoWidth,
         height: video.videoHeight,
       };
-      faceapi.matchDimensions(canvasRef.current, displaySize);
+
+      // อัปเดตขนาด Canvas ให้ตรงกับวิดีโอ
+      canvasRef.current.width = displaySize.width;
+      canvasRef.current.height = displaySize.height;
 
       try {
-        const detections = await faceapi.detectAllFaces(
-          video,
-          new faceapi.TinyFaceDetectorOptions(),
-        );
-        const resized = faceapi.resizeResults(detections, displaySize);
+        const result = await human.detect(video);
         const ctx = canvasRef.current.getContext("2d");
         ctx.clearRect(0, 0, displaySize.width, displaySize.height);
 
-        if (resized.length > 0) {
-          const face = resized[0];
-          const { width, height, x } = face.box;
-          const isClear = face.score > 0.7;
+        if (result.face && result.face.length > 0) {
+          const face = result.face[0];
+          // Human ให้ค่ากล่องเป็น array: [x, y, width, height]
+          const [x, y, width, height] = face.box;
+
+          const isClear = face.boxScore > 0.5;
           const isLarge = width > 100 && height > 100;
           const isCentered =
             Math.abs(displaySize.width / 2 - (x + width / 2)) < 150;
+          // เช็ค Liveness (คนจริง)
+          const isReal = face.real ? face.real > 0.5 : true;
 
-          if (isClear && isLarge && isCentered) {
+          ctx.lineWidth = 3;
+          ctx.font = "16px sans-serif";
+
+          if (isClear && isLarge && isCentered && isReal) {
             setFaceDetected(true);
-            new faceapi.draw.DrawBox(face.box, {
-              boxColor: "green",
-              label: "Perfect!",
-            }).draw(canvasRef.current);
+            ctx.strokeStyle = "#10B981"; // สีเขียว
+            ctx.strokeRect(x, y, width, height);
+            ctx.fillStyle = "#10B981";
+            ctx.fillText("Perfect! (Real Face)", x, y - 10);
           } else {
             setFaceDetected(false);
-            const msg = !isCentered
-              ? "Center your face"
-              : !isLarge
-                ? "Move closer"
-                : "Not clear";
-            new faceapi.draw.DrawBox(face.box, {
-              boxColor: "red",
-              label: msg,
-            }).draw(canvasRef.current);
+            let msg = "Not clear";
+            if (!isReal) msg = "Fake Face! (Use real face)";
+            else if (!isCentered) msg = "Center your face";
+            else if (!isLarge) msg = "Move closer";
+
+            ctx.strokeStyle = "#EF4444"; // สีแดง
+            ctx.strokeRect(x, y, width, height);
+            ctx.fillStyle = "#EF4444";
+            ctx.fillText(msg, x, y - 10);
           }
         } else {
           setFaceDetected(false);
         }
-      } catch {}
+      } catch (e) {}
     }, 500);
     return () => clearInterval(interval);
   }, [isModelLoaded]);
@@ -137,8 +161,9 @@ const FaceRegister = () => {
     setErrorMsg("");
     try {
       const token = localStorage.getItem("token");
-      await axios.post(
-        "http://localhost:8000/student/register-face",
+      // ✅ แก้จาก axios เป็น api (ตามตัวแปรที่คุณ import ไว้ด้านบน)
+      await api.post(
+        "/student/register-face",
         { images: imagesRef.current },
         { headers: { Authorization: `Bearer ${token}` } },
       );
@@ -161,6 +186,7 @@ const FaceRegister = () => {
     setErrorMsg("");
   };
 
+  // 👇 UI เดิมของคุณ 100% ไม่มีการดัดแปลงครับ 👇
   return (
     <div className="flex h-screen bg-[#F3F4F6] font-sans">
       <Sidebar />
