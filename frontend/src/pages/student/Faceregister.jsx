@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import Webcam from "react-webcam";
-import api from "../../api/axios"; // ✅ ใช้ api ที่คุณ import ไว้
-import Human from "@vladmandic/human"; // ✅ เปลี่ยนมาใช้ Human แทน face-api.js
+import api from "../../api/axios";
+import Human from "@vladmandic/human";
 import {
   FiCamera,
   FiRefreshCw,
@@ -34,25 +34,14 @@ const STEPS = [
   },
 ];
 
-// ✅ ตั้งค่า Human (เปิดระบบ Liveness)
-const humanConfig = {
-  modelBasePath: "https://vladmandic.github.io/human-models/models",
-  face: {
-    enabled: true,
-    detector: { rotation: true, maxDetected: 1 },
-    mesh: { enabled: true },
-    liveness: { enabled: true }, // เปิดการตรวจจับคนจริง
-  },
-  body: { enabled: false },
-  hand: { enabled: false },
-  object: { enabled: false },
-};
-
-const human = new Human(humanConfig);
-
 const FaceRegister = () => {
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
+  const humanRef = useRef(null);
+
+  // ใช้ useRef สำหรับควบคุมสถานะ
+  const isDetectingRef = useRef(true);
+  const isCountDownRef = useRef(false);
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const imagesRef = useRef([]);
@@ -63,19 +52,44 @@ const FaceRegister = () => {
   const [faceDetected, setFaceDetected] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // ✅ โหลด Model ของ Human
+  // 1. โหลด Model Human (Config เดียวกับฝั่งอาจารย์)
   useEffect(() => {
-    human
-      .load()
-      .then(() => setIsModelLoaded(true))
-      .catch((err) => console.error("Failed to load models:", err));
+    const loadHumanModel = async () => {
+      try {
+        const human = new Human({
+          modelBasePath: "https://vladmandic.github.io/human-models/models",
+          face: {
+            enabled: true,
+            detector: { rotation: true, maxDetected: 1 },
+            mesh: { enabled: false },
+            iris: { enabled: false },
+            description: { enabled: false },
+            emotion: { enabled: false },
+            liveness: { enabled: false }, // ปิดไปก่อนเพื่อความลื่นไหล เหมือนฝั่งอาจารย์
+          },
+          body: { enabled: false },
+          hand: { enabled: false },
+          object: { enabled: false },
+          gesture: { enabled: false },
+        });
+
+        await human.load();
+        humanRef.current = human;
+        setIsModelLoaded(true);
+      } catch (error) {
+        console.error("Failed to load models:", error);
+      }
+    };
+    loadHumanModel();
   }, []);
 
-  // ✅ ระบบตรวจจับใบหน้าและวาดกรอบ (แทนที่ face-api.js)
+  // 2. Loop สแกนใบหน้า (ใช้ setInterval เหมือนฝั่งอาจารย์)
   useEffect(() => {
-    if (!isModelLoaded) return;
+    if (!isModelLoaded || !humanRef.current) return;
+
     const interval = setInterval(async () => {
-      if (!webcamRef.current?.video) return;
+      if (!isDetectingRef.current || !webcamRef.current?.video) return;
+
       const video = webcamRef.current.video;
       if (video.readyState !== 4) return;
 
@@ -83,60 +97,90 @@ const FaceRegister = () => {
         width: video.videoWidth,
         height: video.videoHeight,
       };
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-      // อัปเดตขนาด Canvas ให้ตรงกับวิดีโอ
-      canvasRef.current.width = displaySize.width;
-      canvasRef.current.height = displaySize.height;
+      canvas.width = displaySize.width;
+      canvas.height = displaySize.height;
 
-      try {
-        const result = await human.detect(video);
-        const ctx = canvasRef.current.getContext("2d");
-        ctx.clearRect(0, 0, displaySize.width, displaySize.height);
+      const result = await humanRef.current.detect(video);
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, displaySize.width, displaySize.height);
 
-        if (result.face && result.face.length > 0) {
-          const face = result.face[0];
-          // Human ให้ค่ากล่องเป็น array: [x, y, width, height]
-          const [x, y, width, height] = face.box;
+      if (result.face && result.face.length > 0) {
+        const face = result.face[0];
 
-          const isClear = face.boxScore > 0.5;
-          const isLarge = width > 100 && height > 100;
-          const isCentered =
-            Math.abs(displaySize.width / 2 - (x + width / 2)) < 150;
-          // เช็ค Liveness (คนจริง)
-          const isReal = face.real ? face.real > 0.5 : true;
+        // --- 🚨 กลับด้านแกน X สำหรับ Canvas แบบ Mirror ---
+        const [xOriginal, y, width, height] = face.box;
+        const x = displaySize.width - xOriginal - width;
 
-          ctx.lineWidth = 3;
-          ctx.font = "16px sans-serif";
+        // เช็คเงื่อนไข
+        const isClear = face.boxScore > 0.5;
+        const isLarge = width > 100 && height > 100;
+        const isCentered =
+          Math.abs(displaySize.width / 2 - (x + width / 2)) < 200;
 
-          if (isClear && isLarge && isCentered && isReal) {
-            setFaceDetected(true);
-            ctx.strokeStyle = "#10B981"; // สีเขียว
-            ctx.strokeRect(x, y, width, height);
-            ctx.fillStyle = "#10B981";
-            ctx.fillText("Perfect! (Real Face)", x, y - 10);
-          } else {
-            setFaceDetected(false);
-            let msg = "Not clear";
-            if (!isReal) msg = "Fake Face! (Use real face)";
-            else if (!isCentered) msg = "Center your face";
-            else if (!isLarge) msg = "Move closer";
+        const isGood = isClear && isLarge && isCentered;
+        setFaceDetected(isGood);
 
-            ctx.strokeStyle = "#EF4444"; // สีแดง
-            ctx.strokeRect(x, y, width, height);
-            ctx.fillStyle = "#EF4444";
-            ctx.fillText(msg, x, y - 10);
-          }
-        } else {
-          setFaceDetected(false);
-        }
-      } catch (e) {}
-    }, 500);
+        // --- วาดกรอบหน้า (สไตล์เดียวกับฝั่งอาจารย์) ---
+        const boxColor = isGood ? "#22c55e" : "#ef4444"; // เขียว ถ้าผ่านเกณฑ์, แดง ถ้าไม่ผ่าน
+        const cornerLen = 16;
+
+        ctx.strokeStyle = boxColor;
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.4;
+        ctx.strokeRect(x, y, width, height);
+        ctx.globalAlpha = 1;
+
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = boxColor;
+        [
+          [x, y + cornerLen, x, y, x + cornerLen, y],
+          [x + width - cornerLen, y, x + width, y, x + width, y + cornerLen],
+          [x, y + height - cornerLen, x, y + height, x + cornerLen, y + height],
+          [
+            x + width - cornerLen,
+            y + height,
+            x + width,
+            y + height,
+            x + width,
+            y + height - cornerLen,
+          ],
+        ].forEach(([x1, y1, x2, y2, x3, y3]) => {
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.lineTo(x3, y3);
+          ctx.stroke();
+        });
+
+        // --- วาด Label ข้อความ ---
+        const label = isGood ? "Perfect!" : "Center Face / Move Closer";
+        ctx.font = "bold 12px sans-serif";
+        const labelW = ctx.measureText(label).width + 16;
+        ctx.fillStyle = boxColor;
+        ctx.beginPath();
+        ctx.roundRect?.(x, y - 26, labelW, 22, 4) ||
+          ctx.fillRect(x, y - 26, labelW, 22);
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(label, x + 8, y - 10);
+      } else {
+        setFaceDetected(false);
+      }
+    }, 800); // 💡 ใช้ความเร็ว 800ms เท่าฝั่งอาจารย์ จะได้ไม่กระพริบมาก
+
     return () => clearInterval(interval);
   }, [isModelLoaded]);
 
+  // 3. ฟังก์ชันถ่ายรูป
   const captureFrame = useCallback(() => {
-    if (!faceDetected) return;
+    if (!faceDetected || isCountDownRef.current) return;
+
     setIsCountDown(true);
+    isCountDownRef.current = true;
+
     let counter = 3;
     const interval = setInterval(() => {
       counter--;
@@ -146,6 +190,8 @@ const FaceRegister = () => {
         if (imageSrc) {
           imagesRef.current.push(imageSrc);
           setIsCountDown(false);
+          isCountDownRef.current = false;
+
           if (currentStepIndex < STEPS.length - 1) {
             setTimeout(() => setCurrentStepIndex((p) => p + 1), 500);
           } else {
@@ -156,23 +202,30 @@ const FaceRegister = () => {
     }, 1000);
   }, [currentStepIndex, faceDetected]);
 
+  // 4. อัพโหลดรูปภาพ
   const uploadImages = async () => {
     setIsUploading(true);
+    isDetectingRef.current = false; // หยุดสแกนชั่วคราวตอนอัพโหลด
     setErrorMsg("");
     try {
       const token = localStorage.getItem("token");
-      // ✅ แก้จาก axios เป็น api (ตามตัวแปรที่คุณ import ไว้ด้านบน)
       await api.post(
         "/student/register-face",
         { images: imagesRef.current },
         { headers: { Authorization: `Bearer ${token}` } },
       );
       setIsSuccess(true);
+      // เคลียร์ Canvas หลังอัพโหลดเสร็จ
+      if (canvasRef.current) {
+        const ctx = canvasRef.current.getContext("2d");
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
     } catch (error) {
       setErrorMsg(
         "Registration failed: " +
           (error.response?.data?.detail || "Please try again."),
       );
+      isDetectingRef.current = true; // กลับมาสแกนใหม่ถ้าพลาด
     } finally {
       setIsUploading(false);
     }
@@ -184,11 +237,11 @@ const FaceRegister = () => {
     setIsSuccess(false);
     setIsUploading(false);
     setErrorMsg("");
+    isDetectingRef.current = true; // เปิดการสแกนกลับมา
   };
 
-  // 👇 UI เดิมของคุณ 100% ไม่มีการดัดแปลงครับ 👇
   return (
-    <div className="flex h-screen bg-[#F3F4F6] font-sans">
+    <div className="flex h-screen bg-[#F3F4F6] font-sans overflow-hidden">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         {/* Header */}
@@ -225,18 +278,19 @@ const FaceRegister = () => {
               </div>
             )}
 
-            {/* Webcam + controls — stacks vertically on mobile, side-by-side on lg */}
             <div className="flex flex-col lg:flex-row gap-5 sm:gap-8">
-              {/* Camera */}
+              {/* 🚨 Camera Area (เปลี่ยน Layout ให้เหมือนฝั่งอาจารย์) */}
               <div className="flex-1">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                   Camera
                 </p>
-                <div className="relative aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-gray-200">
+                {/* ใช้โครงสร้างคล้ายๆ ของอาจารย์ คือ relative wrapper */}
+                <div className="relative aspect-[4/3] bg-black rounded-3xl overflow-hidden shadow-xl border border-gray-800">
                   <Webcam
                     ref={webcamRef}
                     audio={false}
                     screenshotFormat="image/jpeg"
+                    mirrored={true}
                     className="w-full h-full object-cover"
                   />
                   <canvas
@@ -245,39 +299,33 @@ const FaceRegister = () => {
                   />
 
                   {!isModelLoaded && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-white z-10 gap-3">
-                      <FiRefreshCw className="animate-spin" size={28} />
-                      <span className="text-sm font-semibold">
-                        Loading AI model…
-                      </span>
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                      <div className="text-center text-white">
+                        <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-3" />
+                        <p className="font-bold">Loading AI model...</p>
+                      </div>
                     </div>
                   )}
 
-                  {isModelLoaded && (
-                    <div
-                      className={`absolute bottom-3 left-3 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ${
-                        faceDetected
-                          ? "bg-emerald-500/90 text-white"
-                          : "bg-rose-500/90 text-white"
-                      }`}
-                    >
+                  {isModelLoaded && !isSuccess && (
+                    <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/60 text-white px-4 py-1.5 rounded-full text-sm backdrop-blur-md">
                       <div
-                        className={`w-2 h-2 rounded-full ${faceDetected ? "bg-white animate-pulse" : "bg-white/60"}`}
+                        className={`w-2.5 h-2.5 rounded-full ${faceDetected ? "bg-green-400 animate-pulse" : "bg-red-500"}`}
                       />
-                      {faceDetected ? "Face detected" : "No face detected"}
+                      <span className="font-semibold">
+                        {faceDetected ? "Face Ready" : "Position Face"}
+                      </span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Steps + progress + button */}
+              {/* Steps & Controls */}
               <div className="w-full lg:w-80 flex flex-col gap-4 sm:gap-5">
-                {/* Steps */}
                 <div>
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                     Steps
                   </p>
-                  {/* mobile: horizontal row, desktop: vertical */}
                   <div className="flex flex-row lg:flex-col gap-2 sm:gap-3">
                     {STEPS.map((step, idx) => {
                       const done = idx < currentStepIndex || isSuccess;
@@ -318,7 +366,6 @@ const FaceRegister = () => {
                   </div>
                 </div>
 
-                {/* Progress */}
                 <div>
                   <div className="flex justify-between text-xs font-bold text-gray-400 mb-1.5">
                     <span>Progress</span>
@@ -334,7 +381,6 @@ const FaceRegister = () => {
                   </div>
                 </div>
 
-                {/* Capture button */}
                 {!isSuccess ? (
                   <button
                     onClick={captureFrame}
@@ -348,10 +394,10 @@ const FaceRegister = () => {
                     {isUploading ? (
                       <>
                         <FiRefreshCw className="animate-spin" size={16} />{" "}
-                        Processing…
+                        Processing...
                       </>
                     ) : isCountDown ? (
-                      "Hold Still…"
+                      "Hold Still..."
                     ) : !faceDetected ? (
                       "No Face Detected"
                     ) : (
