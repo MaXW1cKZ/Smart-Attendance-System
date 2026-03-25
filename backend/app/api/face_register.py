@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import delete
@@ -6,62 +6,54 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.users import User
 from app.models.face import FaceEmbedding
-from pydantic import BaseModel
+from datetime import datetime
+
 import numpy as np
-import base64
+
 import io
 from PIL import Image
 from insightface.app import FaceAnalysis
 
 router = APIRouter()
 
-# โหลด InsightFace model
 _face_app = None
 
 
 def get_face_app():
     global _face_app
     if _face_app is None:
-        # ใช้ buffalo_sc: model เบา รองรับ CPU ไม่ต้องการ AVX
         _face_app = FaceAnalysis(name="buffalo_sc", providers=["CPUExecutionProvider"])
         _face_app.prepare(ctx_id=-1, det_size=(640, 640))
     return _face_app
 
 
-class FaceRegisterRequest(BaseModel):
-    images: list[str]
-
-
-def base64_to_image(base64_string: str) -> np.ndarray:
-    if "base64," in base64_string:
-        base64_string = base64_string.split(",")[1]
-    image_data = base64.b64decode(base64_string)
-    image = Image.open(io.BytesIO(image_data)).convert("RGB")
-    # InsightFace ต้องการ BGR
-    return np.array(image)[:, :, ::-1]
-
-
 def check_liveness_minifasnet(img_bgr: np.ndarray) -> dict:
-    """
-    TODO: อนาคตนำโมเดล MiniFASNet (.pth) มาโหลดและ inference ตรงนี้
-    ตอนนี้จะจำลองว่าให้ผ่าน (True)
-    💡 ถ้าอยากทดสอบว่าระบบบล็อคคนเอารูปมาสแกนได้ไหม ให้ลองแก้ "is_real": False ดูครับ
-    """
     return {"is_real": True, "score": 0.98, "message": "Real face detected"}
 
 
 @router.post("/student/register-face")
 async def register_face(
-    req: FaceRegisterRequest,
+    images: list[UploadFile] = File(...),
+    pdpa_consented: bool = Form(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     try:
+        if not pdpa_consented:
+            raise HTTPException(
+                status_code=400, detail="กรุณายอมรับเงื่อนไข PDPA ก่อนลงทะเบียน"
+            )
+
+        face_app = get_face_app()
+        new_face_records = []
         face_app = get_face_app()
         new_face_records = []
 
-        for img_base64 in req.images:
-            img_bgr = base64_to_image(img_base64)
+        for img_file in images:
+            contents = await img_file.read()
+            image = Image.open(io.BytesIO(contents)).convert("RGB")
+            img_bgr = np.array(image)[:, :, ::-1]
+
             liveness_result = check_liveness_minifasnet(img_bgr)
             if not liveness_result["is_real"]:
                 raise HTTPException(
@@ -89,6 +81,9 @@ async def register_face(
         )
 
         db.add_all(new_face_records)
+        current_user.pdpa_consented = True
+        current_user.pdpa_accepted_at = datetime.now()
+        db.add(current_user)
         await db.commit()
 
         return {
@@ -101,3 +96,8 @@ async def register_face(
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail="เกิดข้อผิดพลาดในการประมวลผล AI")
+
+
+@router.get("/student/pdpa-status")
+async def check_pdpa_status(current_user: User = Depends(get_current_user)):
+    return {"pdpa_consented": current_user.pdpa_consented}

@@ -14,6 +14,30 @@ import {
 } from "react-icons/fi";
 import Sidebar from "../../components/Sidebar";
 
+const WS_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000")
+  .replace(/^http/, "ws")
+  .replace(/\/$/, "");
+
+const HUMAN_CONFIG = {
+  modelBasePath: "https://vladmandic.github.io/human-models/models",
+  face: {
+    enabled: true,
+    detector: { rotation: true, maxDetected: 10 },
+    mesh: { enabled: false },
+    iris: { enabled: false },
+    description: { enabled: false },
+    emotion: { enabled: false },
+    liveness: { enabled: false },
+  },
+  body: { enabled: false },
+  hand: { enabled: false },
+  object: { enabled: false },
+  gesture: { enabled: false },
+};
+
+// ส่ง frame ทุก N ms — ไม่รอ response (fire-and-forget)
+const SCAN_INTERVAL_MS = 800;
+
 const RealTimeAttendance = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -21,10 +45,15 @@ const RealTimeAttendance = () => {
 
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
-  const isProcessingRef = useRef(false);
   const isSessionActiveRef = useRef(true);
   const wsRef = useRef(null);
   const humanRef = useRef(null);
+  const statusTimerRef = useRef(null);
+
+  // ── ลบ isProcessingRef ออกทั้งหมด ──────────────────────────────────────────
+  // เดิม: lock loop รอ response → ทีละคน ช้า 2-3 วิ
+  // ใหม่: ส่ง frame ทุก 800ms ไม่ว่า backend จะตอบหรือยัง
+  //        backend loop ทุก face ในภาพแล้วส่ง detected กลับทีละคน
 
   const [logs, setLogs] = useState([]);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
@@ -43,27 +72,20 @@ const RealTimeAttendance = () => {
   const courseCode = courseInfo?.course_code || "";
   const weekNumber = sessionInfo?.week_number || "";
 
-  // 1. โหลดโมเดล Human
+  // reset status label หลัง delay — clear timeout เดิมก่อนเสมอ
+  const setStatusWithTimeout = useCallback((label, timeoutMs = 2000) => {
+    if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+    setStatusLabel(label);
+    statusTimerRef.current = setTimeout(() => {
+      if (isSessionActiveRef.current) setStatusLabel("Scanning...");
+    }, timeoutMs);
+  }, []);
+
+  // ─── 1. โหลดโมเดล Human ───────────────────────────────────────────────────
   useEffect(() => {
     const loadHumanModel = async () => {
       try {
-        const human = new Human({
-          modelBasePath: "https://vladmandic.github.io/human-models/models",
-          face: {
-            enabled: true,
-            detector: { rotation: true, maxDetected: 10 },
-            mesh: { enabled: false },
-            iris: { enabled: false },
-            description: { enabled: false },
-            emotion: { enabled: false },
-            liveness: { enabled: false },
-          },
-          body: { enabled: false },
-          hand: { enabled: false },
-          object: { enabled: false },
-          gesture: { enabled: false },
-        });
-
+        const human = new Human(HUMAN_CONFIG);
         await human.load();
         humanRef.current = human;
         setIsModelLoaded(true);
@@ -76,6 +98,7 @@ const RealTimeAttendance = () => {
     loadHumanModel();
   }, []);
 
+  // ─── 2. ดึง session + attendance เดิม ─────────────────────────────────────
   useEffect(() => {
     const fetchSessionData = async () => {
       try {
@@ -90,6 +113,7 @@ const RealTimeAttendance = () => {
           .map((att) => ({
             id: att.attendance_id || Math.random(),
             student_name: att.name || "Unknown",
+            student_id: att.student_id,
             display_id: att.email ? att.email.split("@")[0] : att.student_id,
             time: att.timestamp
               ? new Date(att.timestamp).toLocaleTimeString("en-US", {
@@ -111,21 +135,18 @@ const RealTimeAttendance = () => {
     if (sessionId) fetchSessionData();
   }, [sessionId]);
 
-  // 3. เชื่อมต่อ WebSocket (รันเมื่อโมเดลโหลดเสร็จ)
+  // ─── 3. WebSocket ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!sessionId || !isModelLoaded) return;
 
-    const token =
-      localStorage.getItem("token") ||
-      localStorage.getItem("access_token") ||
-      "";
-    const wsUrl = `ws://localhost:8000/attendance/ws/${sessionId}?token=${token}`;
+    const token = localStorage.getItem("token") || "";
+    const wsUrl = `${WS_BASE}/attendance/ws/${sessionId}?token=${token}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log("✅ WebSocket Connected");
-      setStatusLabel("System Ready. Scanning...");
+      setStatusLabel("Scanning...");
     };
 
     ws.onmessage = (event) => {
@@ -133,58 +154,45 @@ const RealTimeAttendance = () => {
 
       if (data.status === "detected") {
         const student = data.student;
-        setStatusLabel(`✓ ${student.name}`);
+        const displayName = student.name || student.full_name || "Unknown";
+
+        // แต่ละ response คือ 1 คน — backend loop ทุก face แล้วส่งทีละ response
+        setStatusWithTimeout(`✓ ${displayName}`);
 
         if (!data.already_recorded) {
           setLogs((prev) => {
-            const currentDisplayId = student.email
-              ? student.email.split("@")[0]
-              : student.student_id;
-
-            // ป้องกันการใส่ข้อมูลซ้ำ
-            if (
-              prev.find(
-                (l) =>
-                  l.display_id === currentDisplayId ||
-                  l.student_id === student.student_id,
-              )
-            ) {
+            if (prev.some((l) => l.student_id === student.student_id))
               return prev;
-            }
-
             return [
               {
-                id: Date.now(),
-                student_name: student.name,
+                id: Date.now() + Math.random(), // ป้องกัน key ชนเมื่อหลายคน detect พร้อมกัน
+                student_name: displayName,
                 student_id: student.student_id,
-                display_id: currentDisplayId,
+                display_id: student.email
+                  ? student.email.split("@")[0]
+                  : student.student_id,
                 time: new Date().toLocaleTimeString("en-US", { hour12: false }),
-                confidence: student.confidence
-                  ? student.confidence / 100
-                  : null,
+                confidence:
+                  student.confidence != null ? student.confidence / 100 : null,
                 status: student.status || "present",
               },
               ...prev,
             ];
           });
         }
-      } else if (data.status === "unknown") {
-        setStatusLabel("Unknown face");
       } else if (data.status === "locked") {
         setStatusLabel("Check-in Closed");
-      } else {
-        setStatusLabel("No face matched");
+      } else if (data.status === "error") {
+        console.error("Server:", data.message);
       }
-
-      // ปลดล็อคสถานะการประมวลผล
-      setTimeout(() => {
-        isProcessingRef.current = false;
-        if (isSessionActiveRef.current) setStatusLabel("Scanning...");
-      }, 2000);
+      // ไม่ handle "unknown" — ลด label flicker เมื่อมีคนที่ match ไม่ได้ปนอยู่ในกล้อง
     };
 
-    ws.onerror = (error) => console.error("❌ WebSocket Error:", error);
-    ws.onclose = () => console.log("❌ WebSocket Disconnected");
+    ws.onerror = (err) => console.error("❌ WebSocket Error:", err);
+    ws.onclose = () => {
+      console.log("🔌 WebSocket Disconnected");
+      if (isSessionActiveRef.current) setStatusLabel("Disconnected");
+    };
 
     return () => {
       if (
@@ -194,100 +202,85 @@ const RealTimeAttendance = () => {
         ws.close();
       }
     };
-  }, [sessionId, isModelLoaded]);
+  }, [sessionId, isModelLoaded, setStatusWithTimeout]);
 
-  // 4. ฟังก์ชันส่งรูปผ่าน WebSocket
-  const handleCheckIn = useCallback(() => {
+  // ─── 4. sendFrame — fire-and-forget, ไม่ lock ────────────────────────────
+  const sendFrame = useCallback(() => {
     if (
-      isProcessingRef.current ||
-      !webcamRef.current ||
+      !webcamRef.current?.video ||
       !wsRef.current ||
-      wsRef.current.readyState !== WebSocket.OPEN
+      wsRef.current.readyState !== WebSocket.OPEN ||
+      !isSessionActiveRef.current
     )
       return;
 
-    isProcessingRef.current = true;
-    setStatusLabel("Processing...");
+    const video = webcamRef.current.video;
+    if (video.readyState !== 4) return;
 
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = video.videoWidth;
+    tempCanvas.height = video.videoHeight;
+    tempCanvas.getContext("2d").drawImage(video, 0, 0);
+
+    // toDataURL sync — เร็วกว่า toBlob+FileReader (ไม่มี async round-trip)
+    const dataUrl = tempCanvas.toDataURL("image/jpeg", 0.85);
     try {
-      const imageSrc = webcamRef.current.getScreenshot();
-      if (!imageSrc) {
-        isProcessingRef.current = false;
-        return;
-      }
-
       wsRef.current.send(
-        JSON.stringify({
-          session_id: parseInt(sessionId),
-          image: imageSrc,
-        }),
+        JSON.stringify({ session_id: parseInt(sessionId), image: dataUrl }),
       );
     } catch (err) {
-      console.error("Check-in error:", err);
-      setStatusLabel("Error - retrying...");
-      setTimeout(() => {
-        isProcessingRef.current = false;
-        if (isSessionActiveRef.current) setStatusLabel("Scanning...");
-      }, 2000);
+      console.error("WS send error:", err);
     }
   }, [sessionId]);
 
-  // 5. Loop สแกนใบหน้าด้วย Human
+  // ─── 5. Human detect loop + canvas drawing ───────────────────────────────
   useEffect(() => {
     if (!isModelLoaded || !humanRef.current) return;
 
     const interval = setInterval(async () => {
-      if (
-        !isSessionActiveRef.current ||
-        !webcamRef.current?.video ||
-        isProcessingRef.current
-      )
-        return;
+      if (!isSessionActiveRef.current || !webcamRef.current?.video) return;
 
       const video = webcamRef.current.video;
       if (video.readyState !== 4) return;
 
-      const displaySize = {
-        width: video.videoWidth,
-        height: video.videoHeight,
-      };
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      canvas.width = displaySize.width;
-      canvas.height = displaySize.height;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
 
-      const result = await humanRef.current.detect(video);
+      let result;
+      try {
+        result = await humanRef.current.detect(video);
+      } catch (err) {
+        console.error("Human detect error:", err);
+        return;
+      }
+
       setFaceCount(result.face.length);
 
       const ctx = canvas.getContext("2d");
-      ctx.clearRect(0, 0, displaySize.width, displaySize.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       result.face.forEach((face) => {
-        const [x, y, width, height] = face.box;
-        const boxColor = isProcessingRef.current ? "#f59e0b" : "#22c55e";
-        const cornerLen = 16;
+        const [x, y, w, h] = face.box;
+        const color = "#22c55e";
+        const corner = 16;
 
-        ctx.strokeStyle = boxColor;
+        // bounding box (ใช้ pattern เดียวกับ FaceRegister)
+        ctx.strokeStyle = color;
         ctx.lineWidth = 1.5;
         ctx.globalAlpha = 0.4;
-        ctx.strokeRect(x, y, width, height);
+        ctx.strokeRect(x, y, w, h);
         ctx.globalAlpha = 1;
 
         ctx.lineWidth = 3;
-        ctx.strokeStyle = boxColor;
+        ctx.strokeStyle = color;
         [
-          [x, y + cornerLen, x, y, x + cornerLen, y],
-          [x + width - cornerLen, y, x + width, y, x + width, y + cornerLen],
-          [x, y + height - cornerLen, x, y + height, x + cornerLen, y + height],
-          [
-            x + width - cornerLen,
-            y + height,
-            x + width,
-            y + height,
-            x + width,
-            y + height - cornerLen,
-          ],
+          [x, y + corner, x, y, x + corner, y],
+          [x + w - corner, y, x + w, y, x + w, y + corner],
+          [x, y + h - corner, x, y + h, x + corner, y + h],
+          [x + w - corner, y + h, x + w, y + h, x + w, y + h - corner],
         ].forEach(([x1, y1, x2, y2, x3, y3]) => {
           ctx.beginPath();
           ctx.moveTo(x1, y1);
@@ -296,50 +289,49 @@ const RealTimeAttendance = () => {
           ctx.stroke();
         });
 
-        const label = isProcessingRef.current
-          ? "Processing..."
-          : "Face Detected";
+        const label = "Face Detected";
         ctx.font = "bold 12px sans-serif";
-        const labelW = ctx.measureText(label).width + 16;
-        ctx.fillStyle = boxColor;
+        const lw = ctx.measureText(label).width + 16;
+        ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.roundRect?.(x, y - 26, labelW, 22, 4) ||
-          ctx.fillRect(x, y - 26, labelW, 22);
+        ctx.roundRect?.(x, y - 26, lw, 22, 4) ||
+          ctx.fillRect(x, y - 26, lw, 22);
         ctx.fill();
-        ctx.fillStyle = "#ffffff";
+        ctx.fillStyle = "#fff";
         ctx.fillText(label, x + 8, y - 10);
       });
 
-      // ถ้าเจอใบหน้า ให้ส่งรูปผ่าน WebSocket
-      if (result.face.length > 0 && !isProcessingRef.current) {
-        handleCheckIn();
+      // ส่ง frame ทุกครั้งที่มีใบหน้า — ไม่ block
+      if (result.face.length > 0) {
+        sendFrame();
       }
-    }, 800);
+    }, SCAN_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [isModelLoaded, handleCheckIn]);
+  }, [isModelLoaded, sendFrame]);
 
+  // ─── 6. End session ───────────────────────────────────────────────────────
   const handleStopSession = async () => {
     setEndingSession(true);
     isSessionActiveRef.current = false;
     setIsSessionActive(false);
     setStatusLabel("Session Ended");
+    if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
 
     const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    if (canvas)
+      canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.close();
 
     try {
       await api.post(`/sessions/${sessionId}/end`);
     } catch (e) {
-      console.error("End session API error:", e);
+      console.error("End session error:", e);
     }
 
     localStorage.removeItem("active_session_id");
     window.dispatchEvent(new Event("storage"));
-
     setShowEndConfirm(false);
     setEndingSession(false);
 
@@ -351,10 +343,10 @@ const RealTimeAttendance = () => {
     });
   };
 
+  // ─── Derived values ───────────────────────────────────────────────────────
   const videoConstraints = deviceId
     ? { deviceId: { exact: deviceId } }
     : { facingMode: "user" };
-  const displaySessionId = sessionInfo?.id ?? sessionId;
   const displayCourseCode = courseCode || courseInfo?.course_code || "";
   const displayCourseName = courseName || courseInfo?.name || "";
   const displayWeek =
@@ -367,7 +359,6 @@ const RealTimeAttendance = () => {
     <div className="flex h-screen bg-[#F3F4F6] font-sans overflow-hidden">
       <Sidebar />
 
-      {/* End Session Confirmation Modal */}
       {showEndConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4">
@@ -420,7 +411,6 @@ const RealTimeAttendance = () => {
       )}
 
       <main className="flex-1 overflow-hidden">
-        {/* Header */}
         <div className="bg-gradient-to-r from-blue-700 to-slate-900 h-64 relative px-10 pt-10 pb-24">
           <div className="relative z-10 flex justify-between items-start">
             <div>
@@ -493,7 +483,6 @@ const RealTimeAttendance = () => {
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
         </div>
 
-        {/* Content */}
         <div
           className="px-10 -mt-20 pb-6 relative z-20"
           style={{ height: "calc(100vh - 80px)" }}
@@ -513,11 +502,14 @@ const RealTimeAttendance = () => {
                 className="absolute top-0 left-0 w-full h-full"
               />
 
-              {/* Status Bar */}
               <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
                 <div className="flex items-center gap-2 bg-black/60 text-white px-4 py-1.5 rounded-full text-sm backdrop-blur-md">
                   <div
-                    className={`w-2.5 h-2.5 rounded-full ${isSessionActive ? "bg-green-400 animate-pulse" : "bg-red-500"}`}
+                    className={`w-2.5 h-2.5 rounded-full ${
+                      isSessionActive
+                        ? "bg-green-400 animate-pulse"
+                        : "bg-red-500"
+                    }`}
                   />
                   <span className="font-semibold">{statusLabel}</span>
                 </div>
@@ -608,7 +600,11 @@ const RealTimeAttendance = () => {
                       </div>
                       <div className="text-right flex-shrink-0">
                         <span
-                          className={`flex items-center text-xs gap-1 font-bold ${log.status === "late" ? "text-amber-500" : "text-green-500"}`}
+                          className={`flex items-center text-xs gap-1 font-bold ${
+                            log.status === "late"
+                              ? "text-amber-500"
+                              : "text-green-500"
+                          }`}
                         >
                           <FiCheckCircle size={12} /> {log.time}
                         </span>
@@ -617,7 +613,7 @@ const RealTimeAttendance = () => {
                             <FiClock size={10} /> Late
                           </span>
                         )}
-                        {log.confidence && (
+                        {log.confidence != null && (
                           <p className="text-xs text-gray-400 mt-0.5">
                             Acc : {Math.round(log.confidence * 100)}%
                           </p>
