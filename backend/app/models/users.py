@@ -21,7 +21,7 @@ class User(Base):
     face_embeddings = relationship(
         "FaceEmbedding",
         back_populates="user",
-        uselist=False,
+        uselist=True,
         cascade="all, delete-orphan",
     )
 

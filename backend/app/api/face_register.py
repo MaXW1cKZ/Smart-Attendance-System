@@ -15,7 +15,7 @@ from insightface.app import FaceAnalysis
 
 router = APIRouter()
 
-# โหลด InsightFace model ครั้งเดียวตอน startup
+# โหลด InsightFace model
 _face_app = None
 
 
@@ -41,9 +41,6 @@ def base64_to_image(base64_string: str) -> np.ndarray:
     return np.array(image)[:, :, ::-1]
 
 
-# ==========================================
-# 🛡️ ด่านดักจับรูปปลอม (Anti-Spoofing)
-# ==========================================
 def check_liveness_minifasnet(img_bgr: np.ndarray) -> dict:
     """
     TODO: อนาคตนำโมเดล MiniFASNet (.pth) มาโหลดและ inference ตรงนี้
@@ -61,48 +58,42 @@ async def register_face(
 ):
     try:
         face_app = get_face_app()
-        all_embeddings = []
+        new_face_records = []
 
         for img_base64 in req.images:
             img_bgr = base64_to_image(img_base64)
-
-            # --- 🛡️ ตรวจสอบว่าเป็นคนจริงหรือไม่ ก่อนส่งให้ InsightFace ---
             liveness_result = check_liveness_minifasnet(img_bgr)
             if not liveness_result["is_real"]:
                 raise HTTPException(
-                    status_code=400,
-                    detail="ตรวจพบการใช้รูปภาพหรือหน้าจอ (Spoofing)! กรุณาใช้ใบหน้าจริงในการลงทะเบียน",
+                    status_code=400, detail="ตรวจพบการใช้รูปภาพหรือหน้าจอ! กรุณาใช้ใบหน้าจริง"
                 )
-            # --------------------------------------------------------
 
             faces = face_app.get(img_bgr)
 
             if faces:
-                all_embeddings.append(faces[0].normed_embedding)
+                emb = faces[0].normed_embedding.tolist()
 
-        if not all_embeddings:
+                new_face_records.append(
+                    FaceEmbedding(
+                        user_id=current_user.id,
+                        embedding_vector=emb,
+                        model_name="ArcFace-InsightFace-Gallery",
+                    )
+                )
+
+        if not new_face_records:
             raise HTTPException(status_code=400, detail="ไม่พบใบหน้าในรูปภาพที่ส่งมา")
 
-        # หาค่าเฉลี่ยของ embedding จากหลายๆ มุม เพื่อความแม่นยำที่มากขึ้น (Multi-View)
-        mean_vector = np.mean(all_embeddings, axis=0)
-        final_vector = (mean_vector / np.linalg.norm(mean_vector)).tolist()
-
-        # ลบข้อมูลเก่าออก (ถ้ามี) แล้วแทนที่ด้วยข้อมูลใหม่
         await db.execute(
             delete(FaceEmbedding).where(FaceEmbedding.user_id == current_user.id)
         )
 
-        new_face = FaceEmbedding(
-            user_id=current_user.id,
-            embedding_vector=final_vector,
-            model_name="ArcFace-InsightFace-MultiView",
-        )
-        db.add(new_face)
+        db.add_all(new_face_records)
         await db.commit()
 
         return {
             "status": "success",
-            "message": f"ลงทะเบียนสำเร็จด้วยการประมวลผลจาก {len(all_embeddings)} รูปภาพ",
+            "message": f"ลงทะเบียนสำเร็จ! บันทึกข้อมูลใบหน้าทั้งหมด {len(new_face_records)} มุมมอง",
         }
 
     except HTTPException:
