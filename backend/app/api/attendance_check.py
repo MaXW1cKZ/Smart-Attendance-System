@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, insert
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.models.users import User
@@ -32,11 +32,6 @@ def base64_to_image(base64_string: str) -> np.ndarray:
     return img_array[:, :, ::-1]
 
 
-def fast_cosine_similarity(v1: np.ndarray, v2: np.ndarray) -> float:
-    # v1, v2 ถูก normalize แล้วจาก insightface → dot product = cosine similarity
-    return float(np.dot(v1, v2))
-
-
 def determine_status(session: ClassSession, course: Course, now: datetime):
     if not session.actual_start_time:
         return AttendanceStatus.PRESENT
@@ -59,13 +54,12 @@ def match_face(
     threshold: float = COSINE_THRESHOLD,
 ) -> tuple[dict | None, float]:
     """
-    Vectorized cosine match — เร็วกว่า loop แบบเดิมหลายเท่าเมื่อนักเรียนเยอะ
-    คืนค่า (candidate_dict หรือ None, similarity)
+    Vectorized cosine match — dot product ทั้ง N คนพร้อมกัน
+    vectors ถูก normalize แล้วจาก insightface → dot = cosine similarity
     """
     if not candidates:
         return None, -1.0
 
-    # stack vectors ทั้งหมดเป็น matrix (N, 512) แล้ว dot ครั้งเดียว
     matrix = np.stack([c["vector"] for c in candidates])  # (N, 512)
     sims = matrix @ input_vector  # (N,)
     best_idx = int(np.argmax(sims))
@@ -77,6 +71,19 @@ def match_face(
 
 
 # ─── WebSocket endpoint ────────────────────────────────────────────────────────
+#
+#  Architecture (crop-per-face):
+#    Client: Human.js detect ทุกใบหน้า → crop แต่ละหน้า + margin 40%
+#            → ส่ง N messages ต่อ frame (1 message = 1 crop)
+#    Server: รับ crop เล็ก → face_app.get() บนพื้นที่แคบ
+#            → alignment + embedding แม่นยำเหมือนเดิม แต่เร็วขึ้น 5-10x
+#
+#  ผลลัพธ์:
+#    - Server ไม่ต้องกวาดหาหน้าในภาพ 1280×720 อีกต่อไป
+#    - รูปต่อ message ลดจาก ~150KB → ~15-30KB
+#    - Multi-face ทำงานได้ทันที เพราะ Client แยกหน้าให้แล้ว
+#    - ยังคง detect faces[0] เพราะแต่ละ message มีแค่ 1 หน้า
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 @router.websocket("/attendance/ws/{session_id}")
@@ -107,7 +114,7 @@ async def websocket_attendance(
 
         course = session.course
 
-        # ── โหลด face embeddings ทุกคนในวิชานี้ (โหลดครั้งเดียว cache ไว้) ────
+        # ── โหลด face embeddings ทุกคนในวิชา (cache ครั้งเดียว) ───────────────
         stmt = (
             select(User, FaceEmbedding)
             .join(FaceEmbedding, User.id == FaceEmbedding.user_id)
@@ -124,9 +131,7 @@ async def websocket_attendance(
                     "message": "No students registered for this course have face data",
                 }
             )
-            # ไม่ close — อาจารย์อาจยังเปิดกล้องรอ
 
-        # cache เป็น list of dict (โหลด vector เป็น float32 ครั้งเดียว)
         candidates_cache: list[dict] = [
             {
                 "user": user_obj,
@@ -135,21 +140,25 @@ async def websocket_attendance(
             for user_obj, face_obj in raw_candidates
         ]
 
-        # ── checked_ids: in-memory set แทนการ query DB ซ้ำทุก frame ────────────
-        # โหลด attendance ที่มีอยู่แล้ว (กรณี reconnect / reload)
+        # ── checked_ids: in-memory set — ไม่ต้อง SELECT DB ทุก frame ────────
         existing_result = await db.execute(
             select(Attendance.student_id).where(Attendance.session_id == session_id)
         )
         checked_ids: set[int] = set(existing_result.scalars().all())
 
         # ── Main loop ──────────────────────────────────────────────────────────
+        #
+        #  แต่ละ message = 1 face crop จาก Client
+        #  → ไม่ต้อง loop faces อีกแล้ว เพราะ Client แยกให้แล้ว
+        #  → faces[0] คือหน้าเดียวในรูป crop นั้น
+        # ──────────────────────────────────────────────────────────────────────
         while True:
             data = await websocket.receive_text()
             payload = json.loads(data)
 
             now = datetime.now()
 
-            # ตรวจสอบ time lock ก่อน decode รูป (เร็วกว่า)
+            # ตรวจ time lock ก่อน decode (เร็วกว่า)
             computed_status = determine_status(session, course, now)
             if computed_status is None:
                 absent_after = course.absent_after_minutes or 60
@@ -161,14 +170,15 @@ async def websocket_attendance(
                 )
                 continue
 
-            # decode รูป
+            # decode crop รูปเล็ก
             try:
                 img_bgr = base64_to_image(payload["image"])
             except Exception as e:
                 print(f"Image decode error: {e}")
                 continue
 
-            # ── detect ทุกใบหน้าในภาพ (multi-face) ───────────────────────────
+            # detect บน crop เล็ก — เร็วมากเพราะพื้นที่แคบ
+            # InsightFace จะ align + embed ได้แม่นยำเท่าเดิม เพราะยังมี margin รอบหน้า
             try:
                 faces = face_app.get(img_bgr)
             except Exception as e:
@@ -176,63 +186,51 @@ async def websocket_attendance(
                 continue
 
             if not faces:
-                # ไม่ส่ง response กลับเพื่อลด traffic (frontend handle เอง)
+                # ใน crop นี้หาหน้าไม่เจอ (อาจ crop ชิดเกิน หรือหน้าเบลอ)
                 continue
 
-            responses = []
+            # faces[0] = ใบหน้าเดียวใน crop นั้น
+            input_vector = faces[0].normed_embedding
 
-            for face in faces:
-                input_vector = face.normed_embedding
+            matched_candidate, best_sim = match_face(input_vector, candidates_cache)
 
-                # vectorized match
-                matched_candidate, best_sim = match_face(input_vector, candidates_cache)
+            if matched_candidate is None:
+                # match ไม่ได้ — ไม่ส่ง response (ลด noise)
+                continue
 
-                if matched_candidate is None:
-                    # ใบหน้านี้ match ไม่ได้ — ข้ามไป (ไม่ส่ง unknown ทุกคน)
-                    continue
+            best_user: User = matched_candidate["user"]
+            already_checked = best_user.id in checked_ids
 
-                best_user: User = matched_candidate["user"]
-                already_checked = best_user.id in checked_ids
-
-                if not already_checked:
-                    # INSERT ทันที — ไม่ต้อง SELECT ก่อน เพราะ checked_ids guard แล้ว
-                    new_attendance = Attendance(
-                        student_id=best_user.id,
-                        session_id=session_id,
-                        status=computed_status,
-                        timestamp=now,
-                        confidence_score=int(best_sim * 100),
-                    )
-                    db.add(new_attendance)
-                    # เพิ่มใน set ทันที ป้องกัน frame ถัดไป insert ซ้ำ
-                    checked_ids.add(best_user.id)
-
-                responses.append(
-                    {
-                        "status": "detected",
-                        "already_recorded": already_checked,
-                        "student": {
-                            "id": best_user.id,
-                            "name": best_user.full_name,
-                            "student_id": getattr(
-                                best_user, "student_id", str(best_user.id)
-                            ),
-                            "email": getattr(best_user, "email", ""),
-                            "confidence": round(best_sim * 100, 2),
-                            "status": computed_status.value
-                            if hasattr(computed_status, "value")
-                            else computed_status,
-                        },
-                    }
+            if not already_checked:
+                new_attendance = Attendance(
+                    student_id=best_user.id,
+                    session_id=session_id,
+                    status=computed_status,
+                    timestamp=now,
+                    confidence_score=int(best_sim * 100),
                 )
-
-            # commit ครั้งเดียวต่อ frame (ถ้ามี insert)
-            if any(not r["already_recorded"] for r in responses):
+                db.add(new_attendance)
+                checked_ids.add(best_user.id)
                 await db.commit()
 
-            # ส่ง response ทุก face ในคราวเดียว
-            for resp in responses:
-                await websocket.send_json(resp)
+            await websocket.send_json(
+                {
+                    "status": "detected",
+                    "already_recorded": already_checked,
+                    "student": {
+                        "id": best_user.id,
+                        "name": best_user.full_name,
+                        "student_id": getattr(
+                            best_user, "student_id", str(best_user.id)
+                        ),
+                        "email": getattr(best_user, "email", ""),
+                        "confidence": round(best_sim * 100, 2),
+                        "status": computed_status.value
+                        if hasattr(computed_status, "value")
+                        else computed_status,
+                    },
+                }
+            )
 
     except WebSocketDisconnect:
         print(f"อาจารย์ปิดกล้อง (Session ID: {session_id})")
