@@ -35,17 +35,17 @@ const HUMAN_CONFIG = {
   gesture: { enabled: false },
 };
 
-const SCAN_INTERVAL_MS = 1200;
+const SCAN_INTERVAL_MS = 1500;
 
 // ─── Crop ใบหน้าจาก video frame + เผื่อ margin ────────────────────────────────
 // Human.js คืน face.box = [x, y, width, height] ใน pixel coordinates
 // ต้องเผื่อ margin เพราะ InsightFace ต้องการพื้นที่รอบหน้าเพื่อ alignment ที่แม่นยำ
-const FACE_CROP_MARGIN = 0.4; // 40% ของขนาดกรอบหน้า เผื่อทุกทิศ
+const FACE_CROP_MARGIN = 0.5; // 40% ของขนาดกรอบหน้า เผื่อทุกทิศ
 
 function cropFaceFromVideo(video, box, margin = FACE_CROP_MARGIN) {
   const [bx, by, bw, bh] = box;
   const vw = video.videoWidth;
-  const vh = video.videoHeight;
+  const vh = video.videoHeight; 
 
   // คำนวณ margin เป็น pixel
   const mx = bw * margin;
@@ -204,6 +204,10 @@ const RealTimeAttendance = () => {
             ];
           });
         }
+      } else if (data.status === "fake_face") {
+        // ให้ขึ้นแจ้งเตือนสีแดงเตือนอาจารย์
+        setStatusWithTimeout(`❌ Fake Face Detected!`, 2000);
+        console.warn(data.message);
       } else if (data.status === "locked") {
         setStatusLabel("Check-in Closed");
       } else if (data.status === "error") {

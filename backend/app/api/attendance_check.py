@@ -13,11 +13,11 @@ import io
 import json
 from PIL import Image
 from datetime import datetime
-from app.api.face_register import get_face_app
+from app.api.face_register import get_face_app, check_liveness_minifasnet
 
 router = APIRouter()
 
-COSINE_THRESHOLD = 0.45
+COSINE_THRESHOLD = 0.65
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -53,10 +53,6 @@ def match_face(
     candidates: list[dict],
     threshold: float = COSINE_THRESHOLD,
 ) -> tuple[dict | None, float]:
-    """
-    Vectorized cosine match — dot product ทั้ง N คนพร้อมกัน
-    vectors ถูก normalize แล้วจาก insightface → dot = cosine similarity
-    """
     if not candidates:
         return None, -1.0
 
@@ -71,19 +67,6 @@ def match_face(
 
 
 # ─── WebSocket endpoint ────────────────────────────────────────────────────────
-#
-#  Architecture (crop-per-face):
-#    Client: Human.js detect ทุกใบหน้า → crop แต่ละหน้า + margin 40%
-#            → ส่ง N messages ต่อ frame (1 message = 1 crop)
-#    Server: รับ crop เล็ก → face_app.get() บนพื้นที่แคบ
-#            → alignment + embedding แม่นยำเหมือนเดิม แต่เร็วขึ้น 5-10x
-#
-#  ผลลัพธ์:
-#    - Server ไม่ต้องกวาดหาหน้าในภาพ 1280×720 อีกต่อไป
-#    - รูปต่อ message ลดจาก ~150KB → ~15-30KB
-#    - Multi-face ทำงานได้ทันที เพราะ Client แยกหน้าให้แล้ว
-#    - ยังคง detect faces[0] เพราะแต่ละ message มีแค่ 1 หน้า
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 @router.websocket("/attendance/ws/{session_id}")
@@ -114,7 +97,7 @@ async def websocket_attendance(
 
         course = session.course
 
-        # ── โหลด face embeddings ทุกคนในวิชา (cache ครั้งเดียว) ───────────────
+        # ── โหลด face embeddings ทุกคนในวิชา ─────────────────────────────────────
         stmt = (
             select(User, FaceEmbedding)
             .join(FaceEmbedding, User.id == FaceEmbedding.user_id)
@@ -140,25 +123,18 @@ async def websocket_attendance(
             for user_obj, face_obj in raw_candidates
         ]
 
-        # ── checked_ids: in-memory set — ไม่ต้อง SELECT DB ทุก frame ────────
         existing_result = await db.execute(
             select(Attendance.student_id).where(Attendance.session_id == session_id)
         )
         checked_ids: set[int] = set(existing_result.scalars().all())
 
         # ── Main loop ──────────────────────────────────────────────────────────
-        #
-        #  แต่ละ message = 1 face crop จาก Client
-        #  → ไม่ต้อง loop faces อีกแล้ว เพราะ Client แยกให้แล้ว
-        #  → faces[0] คือหน้าเดียวในรูป crop นั้น
-        # ──────────────────────────────────────────────────────────────────────
         while True:
             data = await websocket.receive_text()
             payload = json.loads(data)
 
             now = datetime.now()
 
-            # ตรวจ time lock ก่อน decode (เร็วกว่า)
             computed_status = determine_status(session, course, now)
             if computed_status is None:
                 absent_after = course.absent_after_minutes or 60
@@ -170,15 +146,12 @@ async def websocket_attendance(
                 )
                 continue
 
-            # decode crop รูปเล็ก
             try:
                 img_bgr = base64_to_image(payload["image"])
             except Exception as e:
                 print(f"Image decode error: {e}")
                 continue
 
-            # detect บน crop เล็ก — เร็วมากเพราะพื้นที่แคบ
-            # InsightFace จะ align + embed ได้แม่นยำเท่าเดิม เพราะยังมี margin รอบหน้า
             try:
                 faces = face_app.get(img_bgr)
             except Exception as e:
@@ -186,16 +159,33 @@ async def websocket_attendance(
                 continue
 
             if not faces:
-                # ใน crop นี้หาหน้าไม่เจอ (อาจ crop ชิดเกิน หรือหน้าเบลอ)
                 continue
 
-            # faces[0] = ใบหน้าเดียวใน crop นั้น
+            # 🚨 1. ตรวจสอบ Liveness (MiniFASNet)
+            liveness_result = check_liveness_minifasnet(img_bgr, faces[0].bbox)
+            liveness_score = liveness_result["score"]
+
+            # ปรับเกณฑ์ความเข้มงวด:
+            # ถ้า AI บอกว่าเป็น Fake (is_real=False)
+            # หรือถึงบอกว่าเป็น Real แต่คะแนนความมั่นใจน้อยกว่า 95% ให้ตีเป็น Fake ทันที
+            is_fake = (not liveness_result["is_real"]) or (liveness_score < 0.95)
+
+            if is_fake:
+                await websocket.send_json(
+                    {
+                        "status": "fake_face",
+                        "message": f"ตรวจพบความผิดปกติ (Confidence: {liveness_score * 100:.1f}%)",
+                    }
+                )
+                continue
+
+            # 🚨 2. ถ้าผ่านด่าน Liveness มาได้ (แปลว่าเป็นหน้าคนจริง) ค่อยทำ Recognition
             input_vector = faces[0].normed_embedding
+            matched_candidate, best_sim = match_face(input_vector, candidates_cache)
 
             matched_candidate, best_sim = match_face(input_vector, candidates_cache)
 
             if matched_candidate is None:
-                # match ไม่ได้ — ไม่ส่ง response (ลด noise)
                 continue
 
             best_user: User = matched_candidate["user"]
