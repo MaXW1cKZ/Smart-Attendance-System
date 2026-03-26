@@ -27,7 +27,7 @@ const HUMAN_CONFIG = {
     iris: { enabled: false },
     description: { enabled: false },
     emotion: { enabled: false },
-    liveness: { enabled: false },
+    liveness: { enabled: true },
   },
   body: { enabled: false },
   hand: { enabled: false },

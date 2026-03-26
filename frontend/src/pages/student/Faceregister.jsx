@@ -90,7 +90,7 @@ const FaceRegister = () => {
             iris: { enabled: false },
             description: { enabled: false },
             emotion: { enabled: false },
-            liveness: { enabled: false },
+            liveness: { enabled: true },
           },
           body: { enabled: false },
           hand: { enabled: false },
@@ -150,12 +150,18 @@ const FaceRegister = () => {
         const isLarge = width > 100 && height > 100;
         const isCentered =
           Math.abs(displaySize.width / 2 - (x + width / 2)) < 200;
+        const livenessScore = face.liveness || 1.0;
+        const isRealFace = livenessScore > 0.9;
 
-        const isGood = isClear && isLarge && isCentered;
+        const isGood = isClear && isLarge && isCentered && isRealFace;
 
         setFaceDetected((prev) => (prev !== isGood ? isGood : prev));
 
-        const boxColor = isGood ? "#22c55e" : "#ef4444";
+        const boxColor = isRealFace
+          ? isGood
+            ? "#22c55e"
+            : "#eab308"
+          : "#ef4444";
         const cornerLen = 16;
 
         ctx.strokeStyle = boxColor;
