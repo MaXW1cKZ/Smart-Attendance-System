@@ -5,7 +5,7 @@ import './index.css'
 import { GoogleOAuthProvider } from '@react-oauth/google';
 
 // 2. เอา Client ID ของคุณมาใส่ตรงนี้
-const GOOGLE_CLIENT_ID = "291635293570-f2ng0herj90g22t9oh05njonaas4l8dj.apps.googleusercontent.com";
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
