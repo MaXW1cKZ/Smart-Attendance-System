@@ -31,7 +31,7 @@ services:
   frontend:
     build:
       context: ./frontend
-    args:
+      args:
         - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
         - VITE_API_URL=/api
     container_name: smart_attendance_frontend
