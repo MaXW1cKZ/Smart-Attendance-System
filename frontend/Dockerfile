@@ -5,6 +5,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
+ARG VITE_GOOGLE_CLIENT_ID
+ARG VITE_API_URL
+
 COPY . .
 RUN npm run build
 
