@@ -35,7 +35,7 @@ const HUMAN_CONFIG = {
   gesture: { enabled: false },
 };
 
-const SCAN_INTERVAL_MS = 1500;
+const SCAN_INTERVAL_MS = 1000;
 
 const FACE_CROP_MARGIN = 0.5;
 
