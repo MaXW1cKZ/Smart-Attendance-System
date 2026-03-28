@@ -26,8 +26,6 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
-    courses_taught = relationship("Course", back_populates="teacher")
     courses = relationship("Course", back_populates="teacher")
     enrollments = relationship("Enrollment", back_populates="student")
-    attendance_records = relationship("Attendance", back_populates="student")
     attendances = relationship("Attendance", back_populates="student")
