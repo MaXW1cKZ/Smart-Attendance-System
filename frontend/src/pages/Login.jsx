@@ -96,7 +96,7 @@ const Login = () => {
               </span>
             </h1>
             <p className="text-gray-500 text-lg">
-              Welcome back! Please login to continue.
+              Welcome! Please login to continue.
             </p>
           </div>
 
