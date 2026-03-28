@@ -27,7 +27,7 @@ const HUMAN_CONFIG = {
     iris: { enabled: false },
     description: { enabled: false },
     emotion: { enabled: false },
-    liveness: { enabled: true },
+    liveness: { enabled: false },
   },
   body: { enabled: false },
   hand: { enabled: false },
@@ -37,10 +37,7 @@ const HUMAN_CONFIG = {
 
 const SCAN_INTERVAL_MS = 1500;
 
-// ─── Crop ใบหน้าจาก video frame + เผื่อ margin ────────────────────────────────
-// Human.js คืน face.box = [x, y, width, height] ใน pixel coordinates
-// ต้องเผื่อ margin เพราะ InsightFace ต้องการพื้นที่รอบหน้าเพื่อ alignment ที่แม่นยำ
-const FACE_CROP_MARGIN = 0.5; // 40% ของขนาดกรอบหน้า เผื่อทุกทิศ
+const FACE_CROP_MARGIN = 0.5;
 
 function cropFaceFromVideo(video, box, margin = FACE_CROP_MARGIN) {
   const [bx, by, bw, bh] = box;
@@ -51,7 +48,7 @@ function cropFaceFromVideo(video, box, margin = FACE_CROP_MARGIN) {
   const mx = bw * margin;
   const my = bh * margin;
 
-  // ขยายกรอบออกทุกทิศ + clamp ไม่ให้เกินขอบภาพ
+  // ขยายกรอบออกทุกทิศไม่ให้เกินขอบภาพ
   const x1 = Math.max(0, Math.floor(bx - mx));
   const y1 = Math.max(0, Math.floor(by - my));
   const x2 = Math.min(vw, Math.ceil(bx + bw + mx));
@@ -59,7 +56,7 @@ function cropFaceFromVideo(video, box, margin = FACE_CROP_MARGIN) {
   const cropW = x2 - x1;
   const cropH = y2 - y1;
 
-  // วาดลง offscreen canvas ขนาดเท่า crop (เล็กมาก ~150-250px)
+  // วาดลง offscreen canvas ขนาดเท่า crop
   const canvas = document.createElement("canvas");
   canvas.width = cropW;
   canvas.height = cropH;
@@ -67,7 +64,7 @@ function cropFaceFromVideo(video, box, margin = FACE_CROP_MARGIN) {
     .getContext("2d")
     .drawImage(video, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
 
-  return canvas.toDataURL("image/jpeg", 0.9); // quality สูงหน่อยเพราะรูปเล็กอยู่แล้ว
+  return canvas.toDataURL("image/jpeg", 0.9);
 }
 
 const RealTimeAttendance = () => {
@@ -109,7 +106,7 @@ const RealTimeAttendance = () => {
     }, timeoutMs);
   }, []);
 
-  // ─── 1. โหลดโมเดล Human ───────────────────────────────────────────────────
+  // 1. โหลดโมเดล Human 
   useEffect(() => {
     const loadHumanModel = async () => {
       try {
@@ -161,7 +158,7 @@ const RealTimeAttendance = () => {
     if (sessionId) fetchSessionData();
   }, [sessionId]);
 
-  // ─── 3. WebSocket ─────────────────────────────────────────────────────────
+  //  3. WebSocket 
   useEffect(() => {
     if (!sessionId || !isModelLoaded) return;
 

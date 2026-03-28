@@ -19,10 +19,6 @@ router = APIRouter()
 
 COSINE_THRESHOLD = 0.65
 
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
-
 def base64_to_image(base64_string: str) -> np.ndarray:
     if "base64," in base64_string:
         base64_string = base64_string.split(",")[1]
@@ -66,9 +62,6 @@ def match_face(
     return candidates[best_idx], best_sim
 
 
-# ─── WebSocket endpoint ────────────────────────────────────────────────────────
-
-
 @router.websocket("/attendance/ws/{session_id}")
 async def websocket_attendance(
     websocket: WebSocket,
@@ -80,7 +73,6 @@ async def websocket_attendance(
     face_app = get_face_app()
 
     try:
-        # ── โหลด session + course ──────────────────────────────────────────────
         sess_result = await db.execute(
             select(ClassSession)
             .options(selectinload(ClassSession.course))
@@ -97,7 +89,6 @@ async def websocket_attendance(
 
         course = session.course
 
-        # ── โหลด face embeddings ทุกคนในวิชา ─────────────────────────────────────
         stmt = (
             select(User, FaceEmbedding)
             .join(FaceEmbedding, User.id == FaceEmbedding.user_id)
@@ -128,7 +119,6 @@ async def websocket_attendance(
         )
         checked_ids: set[int] = set(existing_result.scalars().all())
 
-        # ── Main loop ──────────────────────────────────────────────────────────
         while True:
             data = await websocket.receive_text()
             payload = json.loads(data)

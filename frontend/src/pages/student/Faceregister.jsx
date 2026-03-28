@@ -90,7 +90,7 @@ const FaceRegister = () => {
             iris: { enabled: false },
             description: { enabled: false },
             emotion: { enabled: false },
-            liveness: { enabled: true },
+            liveness: { enabled: false },
           },
           body: { enabled: false },
           hand: { enabled: false },
