@@ -206,12 +206,11 @@ export default function StudentDashboard() {
                   value={atRiskCount}
                   color={atRiskCount > 0 ? "rose" : "emerald"}
                   icon={<FiAlertTriangle size={13} />}
-                  sub={atRiskCount > 0 ? "Below criteria" : "All good ✓"}
+                  sub={atRiskCount > 0 ? "Below criteria" : "All good"}
                 />
               </div>
             )}
 
-            {/* No courses empty state */}
             {courses.length === 0 && (
               <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 py-12">
                 <FiBook size={48} className="opacity-20" />
@@ -280,6 +279,12 @@ export default function StudentDashboard() {
                               {String(c.start_time).slice(0, 5)}–
                               {String(c.end_time).slice(0, 5)}
                             </p>
+                            <p className="text-xs text-gray-500 mt-1 flex items-center gap-1 font-medium">
+                              <FiUser size={11} className="text-gray-400" />
+                              {c.teacher_name
+                                ? `Name: ${c.teacher_name}`
+                                : "No Instructor"}
+                            </p>
                           </div>
                           <FiChevronRight
                             size={15}
@@ -306,26 +311,44 @@ export default function StudentDashboard() {
                               </span>
                             </div>
                             <div className="space-y-1">
-                              <div className="flex justify-between text-xs">
-                                <span className="text-gray-400 font-medium">
-                                  Attendance
-                                </span>
-                                <span
-                                  className={`font-bold ${pct >= threshold ? "text-emerald-600" : pct >= threshold * 0.85 ? "text-orange-500" : "text-rose-500"}`}
-                                >
-                                  {pct ?? 0}%
-                                  <span className="text-gray-300 font-normal ml-1">
-                                    / {threshold}% req
+                              <div className="space-y-2 mt-2">
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-gray-400 font-medium">
+                                    Attendance
                                   </span>
-                                </span>
-                              </div>
-                              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all ${pctBarColor(pct ?? 0, threshold)}`}
-                                  style={{
-                                    width: `${Math.min(pct ?? 0, 100)}%`,
-                                  }}
-                                />
+                                  <span
+                                    className={`font-bold ${pct >= threshold ? "text-emerald-600" : pct >= threshold * 0.85 ? "text-orange-500" : "text-rose-500"}`}
+                                  >
+                                    {pct ?? 0}%
+                                    <span className="text-gray-300 font-normal ml-1">
+                                      / {threshold}%
+                                    </span>
+                                  </span>
+                                </div>
+
+                                {r?.course?.use_scoring && (
+                                  <div className="space-y-1">
+                                    <div className="flex justify-between text-xs">
+                                      <span className="text-gray-400 font-medium">
+                                        Total Score
+                                      </span>
+                                      <span className="font-bold text-blue-600">
+                                        {me.total_score ?? 0}
+                                        <span className="text-gray-300 font-normal ml-1">
+                                          / {me.max_score ?? 0} pts
+                                        </span>
+                                      </span>
+                                    </div>
+                                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full rounded-full transition-all bg-blue-500"
+                                        style={{
+                                          width: `${me.max_score ? Math.min(((me.total_score || 0) / me.max_score) * 100, 100) : 0}%`,
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                             {r?.course?.use_scoring &&

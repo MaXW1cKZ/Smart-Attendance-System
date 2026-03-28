@@ -18,6 +18,7 @@ import {
   FiPlay,
   FiBarChart2,
   FiX,
+  FiAward,
 } from "react-icons/fi";
 
 const PAGE_SIZE = 10;
@@ -340,23 +341,16 @@ export default function Stu_Attendance() {
                     <SummaryCard
                       label="Attendance"
                       value={`${myStats.attendance_pct || 0}%`}
-                      sub={myStats.passed ? "Passing Criteria" : "At Risk"}
+                      sub={myStats.passed ? "Pass" : "At Risk"}
                       color={myStats.passed ? "blue" : "rose"}
                       icon={<FiBarChart2 size={16} />}
                     />
                     <SummaryCard
                       label="Present"
                       value={myStats.present || 0}
-                      sub="On-time check-ins"
+                      sub="On time check-in"
                       color="emerald"
                       icon={<FiCheckCircle size={16} />}
-                    />
-                    <SummaryCard
-                      label="Late"
-                      value={myStats.late || 0}
-                      sub="Partial penalty"
-                      color="orange"
-                      icon={<FiClock size={16} />}
                     />
                     <SummaryCard
                       label="Absent"
@@ -365,6 +359,23 @@ export default function Stu_Attendance() {
                       color="rose"
                       icon={<FiXCircle size={16} />}
                     />
+                    {course?.use_scoring ? (
+                      <SummaryCard
+                        label="Total Score"
+                        value={myStats.total_score || 0}
+                        sub={`Out of ${myStats.max_score || 0} pts`}
+                        color="orange"
+                        icon={<FiAward size={16} />}
+                      />
+                    ) : (
+                      <SummaryCard
+                        label="Late"
+                        value={myStats.late || 0}
+                        sub="Partial penalty"
+                        color="orange"
+                        icon={<FiClock size={16} />}
+                      />
+                    )}
                   </div>
                 )}
 
@@ -430,6 +441,7 @@ export default function Stu_Attendance() {
                         <th className="pb-4">Topic / Room</th>
                         <th className="pb-4 text-center w-40">Session Time</th>
                         <th className="pb-4 text-center w-32">My Check-in</th>
+                        <th className="pb-4 text-center w-24">Score</th>
                         <th className="pb-4 text-right pr-4 w-32">Status</th>
                       </tr>
                     </thead>
@@ -483,6 +495,13 @@ export default function Stu_Attendance() {
                               {record?.timestamp
                                 ? fmtTime(record.timestamp)
                                 : "—"}
+                            </td>
+                            <td className="text-center font-bold text-xs text-gray-600">
+                              {course?.use_scoring
+                                ? record?.score != null
+                                  ? record.score
+                                  : "0"
+                                : "-"}
                             </td>
                             <td className="text-right pr-4">
                               <span
